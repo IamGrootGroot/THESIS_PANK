@@ -3,31 +3,42 @@
 
 import os
 import torch
-from torch.utils.data import DataLoader, Dataset
-
-from PIL import Image
-import pandas as pd
-
 import timm
-from timm.data import resolve_data_config
-from timm.data.transforms_factory import create_transform
+import pandas as pd
+from PIL import Image
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+from tqdm import tqdm
 from huggingface_hub import login
-# If your version of PyTorch <2.0, do NOT pass extra args
-from torch.cuda.amp import autocast  # For older torch versions, we'll use `autocast(enabled=...)`
+import numpy as np
+from pathlib import Path
+import sys
+
+# Add the parent directory to the path so we can import config
+sys.path.append(str(Path(__file__).parent.parent))
+from config import (
+    PATCHES_DIR, FEATURES_OUTPUT, BATCH_SIZE, FEATURE_DIM,
+    get_os_path, setup_directories
+)
+
+# Ensure directories exist
+setup_directories()
 
 ######################################################
 # 1) Custom dataset using .jpg tiles or other formats
 ######################################################
-class ImageDataset(Dataset):
+class PatchDataset(Dataset):
     def __init__(self, image_dir, transform=None):
         self.image_dir = image_dir
-        self.transform = transform
+        self.transform = transform or transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
         self.image_files = []
-
-        for root, _, files in os.walk(self.image_dir):
+        for root, _, files in os.walk(image_dir):
             for file in files:
-                # Include other extensions if needed: .png, .tif, etc.
-                if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg'):
+                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
                     self.image_files.append(os.path.join(root, file))
 
     def __len__(self):
@@ -43,37 +54,30 @@ class ImageDataset(Dataset):
 ######################################################
 # 2) Model initialization
 ######################################################
-def init_uni2_model(device):
+def get_model(device):
     """
     Logs in to HuggingFace Hub and returns the UNI2 model on the specified device.
     """
     login(token='YOUR_HUGGING_FACE_TOKEN_HERE') # Please keep it private (it's my personal token)
 
     # These hyperparameters come from:
-    # https://huggingface.co/MahmoodLab/UNI2-h
+    # https://huggingface.co/mahmoodlab/uni2-h/blob/main/configs/uni2_h.yaml
     timm_kwargs = {
-        'img_size': 224,
-        'patch_size': 14,
-        'depth': 24,
-        'num_heads': 24,
-        'init_values': 1e-5,
-        'embed_dim': 1536,
-        'mlp_ratio': 2.66667 * 2,
-        'num_classes': 0,         # no classifier head
-        'no_embed_class': True,
-        'mlp_layer': timm.layers.SwiGLUPacked,
-        'act_layer': torch.nn.SiLU,
-        'reg_tokens': 8,
-        'dynamic_img_size': True
+        "model_name": "vit_base_patch16_224",
+        "pretrained": False,
+        "num_classes": 0,
+        "global_pool": "",
     }
 
-    model = timm.create_model(
-        "hf-hub:MahmoodLab/UNI2-h",
-        pretrained=True,
-        **timm_kwargs
-    )
+    # Load the model
+    model = timm.create_model(**timm_kwargs)
+    
+    # Load the weights
+    state_dict = torch.load(get_os_path(PATCHES_DIR / "uni2_h.pth"), map_location=device)
+    model.load_state_dict(state_dict)
+    
+    model = model.to(device)
     model.eval()
-    model.to(device)
     return model
 
 ######################################################
@@ -92,29 +96,25 @@ def get_uni2_transform(model):
 ######################################################
 # 4) Obtain embeddings - feature extraction
 ######################################################
-def obtain_embedding(dataloader, model, device):
-    all_embeddings = []
-    all_filenames = []
-
-    for images, filenames in dataloader:
-        images = images.to(device, non_blocking=True)
-
-        # If you do not need mixed precision, remove autocast completely
-        with torch.inference_mode(), autocast(enabled=(device.type == 'cuda')):
-            # The model output should be of shape (batch_size, 1536)
+def extract_features(model, dataloader, device):
+    features_list = []
+    paths_list = []
+    
+    with torch.no_grad():
+        for images, paths in tqdm(dataloader, desc="Extracting features"):
+            images = images.to(device)
+            
+            # Get features
             features = model(images)
-
-        # Ensure it's at least 2D
-        if features.dim() == 1:
-            features = features.unsqueeze(0)
-
-        features = features.cpu()  # move to CPU
-        all_embeddings.append(features)
-        all_filenames.extend(filenames)
-
-    # Concatenate along batch dimension
-    embeddings_tensor = torch.cat(all_embeddings, dim=0)
-    return embeddings_tensor, all_filenames
+            
+            # Ensure it's at least 2D
+            if features.dim() == 1:
+                features = features.unsqueeze(0)
+            
+            features_list.append(features.cpu().numpy())
+            paths_list.extend(paths)
+    
+    return np.vstack(features_list), paths_list
 
 ######################################################
 # 5) Save embeddings to .csv
@@ -137,39 +137,33 @@ def save_embeddings_to_csv(embeddings_tensor, filenames, output_csv_path):
 ######################################################
 # 6) Main pipeline
 ######################################################
-def main(
-    patch_dir,
-    output_dir="./output_embeddings",
-    output_csv_name="embeddings_colon.csv", # Specify your .csv file name with the features
-    batch_size=32
-):
+def main():
+    # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running on device = {device}")
-
-    # 6.1. Initialize UNI2 model
-    model = init_uni2_model(device)
-
-    # 6.2. Define transform for the model
-    transform = get_uni2_transform(model)
-
-    # 6.3. Create dataset and dataloader
-    dataset = ImageDataset(patch_dir, transform=transform)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True
-    )
-
-    # 6.4. Extract embeddings
-    embeddings_tensor, filenames = obtain_embedding(dataloader, model, device)
-
-    # 6.5. Save embeddings (dim) + file names into a CSV file
-    os.makedirs(output_dir, exist_ok=True)
-    output_csv_path = os.path.join(output_dir, output_csv_name)
-    save_embeddings_to_csv(embeddings_tensor, filenames, output_csv_path)
+    print(f"Using device: {device}")
+    
+    # Initialize model
+    print("Loading model...")
+    model = get_model(device)
+    
+    # Create dataset and dataloader
+    print("Creating dataset...")
+    dataset = PatchDataset(get_os_path(PATCHES_DIR))
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    
+    # Extract features
+    print("Extracting features...")
+    features, paths = extract_features(model, dataloader, device)
+    
+    # Create DataFrame
+    print("Saving features...")
+    df = pd.DataFrame(features)
+    df['path'] = paths
+    
+    # Save to CSV
+    output_path = get_os_path(FEATURES_OUTPUT / "features.csv")
+    df.to_csv(output_path, index=False)
+    print(f"Features saved to {output_path}")
 
 if __name__ == "__main__":
-    patch_dir = r"C:\Users\LA0122630\Documents\Kassab_UniClusteringPancreas\02_ROI_patches" # Specify your input patch folder here
-    main(patch_dir)
+    main()
