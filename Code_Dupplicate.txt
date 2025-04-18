@@ -1,0 +1,34 @@
+import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.gui.scripting.QPEx
+import qupath.lib.roi.interfaces.ROI
+
+// Get the current hierarchy
+def imageData = QPEx.getCurrentImageData()
+def hierarchy = imageData.getHierarchy()
+
+// Find the annotation named "LGA"
+def annotation = hierarchy.getAnnotationObjects().find { it.getName() == "LGA" }
+
+if (annotation == null) {
+    print "No annotation named 'LGA' found."
+} else {
+    // Get the ROI and classification of the original annotation
+    def roi = annotation.getROI()
+    def pathClass = annotation.getPathClass()
+
+    // Create duplicates with new names and new ROI instances
+    def duplicatedAnnotations = ["LGE", "LGS"].collect { name ->
+        def newROI = roi.duplicate()  // Ensure we get a proper copy of the ROI
+        def duplicate = new PathAnnotationObject(newROI, pathClass)
+        duplicate.setName(name)
+        return duplicate
+    }
+    
+    // Add the duplicated annotations to the hierarchy
+    hierarchy.addPathObjects(duplicatedAnnotations)
+    
+    // Refresh the display
+    QPEx.fireHierarchyUpdate()
+    
+    print "Annotations duplicated successfully! Created 'LGE' and 'LGS'."
+}

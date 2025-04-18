@@ -1,0 +1,154 @@
+import os
+import torch
+from torch.utils.data import DataLoader, Dataset
+from PIL import Image
+import pandas as pd
+from tqdm import tqdm  # For progress bar
+
+import timm
+from timm.data import resolve_data_config
+from timm.data.transforms_factory import create_transform
+from huggingface_hub import login
+
+# ----------------------------------------
+# 1) Custom Dataset for Image Tiles
+# ----------------------------------------
+class ImageDataset(Dataset):
+    def __init__(self, image_dir, transform=None):
+        self.image_dir = image_dir
+        self.transform = transform
+        self.image_files = []
+
+        for root, _, files in os.walk(self.image_dir):
+            for file in files:
+                if file.lower().endswith(('.jpg', '.jpeg', '.png', '.tif', '.tiff')):  # Supports multiple formats
+                    self.image_files.append(os.path.join(root, file))
+
+    def __len__(self):
+        return len(self.image_files)
+
+    def __getitem__(self, idx):
+        img_path = self.image_files[idx]
+        image = Image.open(img_path).convert('RGB')
+        if self.transform:
+            image = self.transform(image)
+        return image, img_path
+
+# ----------------------------------------
+# 2) Model Initialization
+# ----------------------------------------
+
+def init_uni2_model(device):
+    """
+    Logs into HuggingFace Hub and initializes the UNI2-h model.
+    """
+    login(token="YOUR_HUGGING_FACE_TOKEN_HERE")  # Replace with your actual Hugging Face token
+
+    timm_kwargs = {
+        'img_size': 224,
+        'patch_size': 14,
+        'depth': 24,
+        'num_heads': 24,
+        'init_values': 1e-5,
+        'embed_dim': 1536,
+        'mlp_ratio': 2.66667 * 2,
+        'num_classes': 0,
+        'no_embed_class': True,
+        'mlp_layer': timm.layers.SwiGLUPacked,
+        'act_layer': torch.nn.SiLU,
+        'reg_tokens': 8,
+        'dynamic_img_size': True
+    }
+
+    model = timm.create_model("hf-hub:MahmoodLab/UNI2-h", pretrained=True, **timm_kwargs)
+    model.eval().to(device)
+    return model
+
+# ----------------------------------------
+# 3) Image Preprocessing (Transform)
+# ----------------------------------------
+
+def get_uni2_transform(model):
+    """
+    Retrieves the model's default preprocessing transform.
+    """
+    config = resolve_data_config(model.pretrained_cfg, model=model)
+    transform = create_transform(**config)
+    return transform
+
+# ----------------------------------------
+# 4) Feature Extraction Function with Mixed Precision
+# ----------------------------------------
+
+def extract_embeddings(dataloader, model, device):
+    all_embeddings = []
+    all_filenames = []
+    
+    scaler = torch.amp.GradScaler('cuda')  # Updated for compatibility
+    
+    with torch.inference_mode():
+        for images, filenames in tqdm(dataloader, desc="Extracting Features"):
+            images = images.to(device, non_blocking=True)
+            
+            # Use mixed precision autocast
+            with torch.cuda.amp.autocast():
+                features = model(images)
+            
+            # Ensure correct dimensions
+            if features.dim() == 1:
+                features = features.unsqueeze(0)
+            
+            all_embeddings.append(features.cpu())
+            all_filenames.extend(filenames)
+    
+    # Concatenate batch outputs
+    embeddings_tensor = torch.cat(all_embeddings, dim=0)
+    return embeddings_tensor, all_filenames
+
+# ----------------------------------------
+# 5) Save Embeddings to CSV
+# ----------------------------------------
+
+def save_embeddings(embeddings_tensor, filenames, output_csv):
+    """
+    Saves extracted feature embeddings along with filenames to a CSV file.
+    """
+    embeddings = embeddings_tensor.numpy()
+    dim_cols = [f"dim_{i}" for i in range(embeddings.shape[1])]
+    df = pd.DataFrame(embeddings, columns=dim_cols)
+    df.insert(0, 'filename', filenames)
+    df.to_csv(output_csv, index=False)
+    print(f"✅ Embeddings saved to {output_csv}")
+
+# ----------------------------------------
+# 6) Main Pipeline
+# ----------------------------------------
+
+def main(image_dir, output_csv, batch_size=32):
+    # Check device availability
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"🚀 Running on device: {device}")
+
+    # Load model
+    model = init_uni2_model(device)
+
+    # Define transforms
+    transform = get_uni2_transform(model)
+
+    # Load dataset
+    dataset = ImageDataset(image_dir, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+
+    # Extract embeddings
+    embeddings_tensor, filenames = extract_embeddings(dataloader, model, device)
+
+    # Save embeddings
+    save_embeddings(embeddings_tensor, filenames, output_csv)
+
+if __name__ == "__main__":
+    # Set your input image directory and output CSV path
+    image_dir = r"C:\Users\LA0122630\Documents\Kassab_UniClusteringPancreas\02_ROI_patches_new2"  # Update with actual image directory
+    output_csv = "output_embeddings_new2.csv"
+
+    # Run the pipeline
+    main(image_dir, output_csv)

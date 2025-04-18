@@ -1,0 +1,35 @@
+import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.gui.QuPathGUI
+
+// Define mapping of old names to new names
+def renameMap = [
+    'NORM001': 'NO', 'NORM002': 'NO', 'NORM003': 'NO', 'NORM004': 'NO', 'NORM005': 'NO', 'NORM006': 'NO',
+    'HG001': 'HG', 'HG002': 'HG', 'HG003': 'HG', 'HG004': 'HG', 'HG005': 'HG', 'HG006': 'HG',
+    'LG001': 'LG', 'LG002': 'LG', 'LG003': 'LG', 'LG004': 'LG', 'LG005': 'LG', 'LG006': 'LG',
+    'INV001': 'IN', 'INV002': 'IN', 'INV003': 'IN', 'INV004': 'IN', 'INV005': 'IN', 'IV006': 'IN'
+]
+
+// Get all annotations
+def annotations = getAnnotationObjects()
+
+def renamedAnnotations = []
+
+// Iterate through annotations and rename them
+annotations.each { annotation ->
+    def oldName = annotation.getName()
+    if (renameMap.containsKey(oldName)) {
+        def newName = renameMap[oldName]
+        annotation.setName(newName)
+        renamedAnnotations.add("Renamed: ${oldName} -> ${newName}")
+    }
+}
+
+// Print renaming results
+if (renamedAnnotations.isEmpty()) {
+    println "Nothing has been renamed."
+} else {
+    renamedAnnotations.each { println it }
+}
+
+// Refresh display to reflect changes
+fireHierarchyUpdate()

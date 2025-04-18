@@ -1,0 +1,38 @@
+import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.gui.scripting.QPEx
+import qupath.lib.roi.RoiTools
+
+// Get the current hierarchy
+def imageData = QPEx.getCurrentImageData()
+def hierarchy = imageData.getHierarchy()
+
+// Find the annotations "LGA" and "LGS"
+def annotationA = hierarchy.getAnnotationObjects().find { it.getName() == "LGA" }
+def annotationS = hierarchy.getAnnotationObjects().find { it.getName() == "LGS" }
+
+if (annotationA == null || annotationS == null) {
+    print("ERROR: One or both annotations ('LGA' or 'LGS') were not found!")
+} else {
+    // Get the ROIs of both annotations
+    def roiA = annotationA.getROI()
+    def roiS = annotationS.getROI()
+    
+    // Subtract the ROIs
+    def roiSubtracted = RoiTools.subtract(roiA, roiS)
+    
+    if (roiSubtracted == null || roiSubtracted.isEmpty()) {
+        print("ERROR: The subtraction resulted in an empty or null ROI!")
+    } else {
+        // Create a new annotation for the subtracted area
+        def annotationE = new PathAnnotationObject(roiSubtracted, annotationA.getPathClass())
+        annotationE.setName("LGE")
+        
+        // Add the new annotation to the hierarchy
+        hierarchy.addObjects([annotationE])
+        
+        // Refresh display
+        QPEx.fireHierarchyUpdate()
+        
+        print("Successfully created annotation 'LGE' as the subtraction of 'LGS' from 'LGA'.")
+    }
+}

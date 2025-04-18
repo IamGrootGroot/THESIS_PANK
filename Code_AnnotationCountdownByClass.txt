@@ -1,0 +1,52 @@
+import qupath.lib.gui.scripting.QPEx
+import qupath.lib.objects.PathAnnotationObject
+
+// Get the project and its image list
+def project = QPEx.getProject()
+def imageList = project.getImageList()
+
+// Define a safe directory to save the CSV file
+def outputDir = new File("C:/Users/LA0122630/Documents/QuPathExports")  // Change if needed
+
+// Ensure the directory exists
+if (!outputDir.exists()) {
+    outputDir.mkdirs()
+}
+
+// Define output file path
+def outputFile = new File(outputDir, "AnnotationCountsClass.csv")
+outputFile.text = "Slide,Annotation,Count\n"
+
+// Iterate over all slides
+for (entry in imageList) {
+    def imageName = entry.getImageName()
+    
+    // Load the image data correctly
+    def imageData = entry.readImageData()
+    if (imageData == null) {
+        print "Skipping ${imageName} (could not load image data)"
+        continue
+    }
+    
+    // Get the hierarchy
+    def hierarchy = imageData.getHierarchy()
+    
+    // Get all annotations
+    def annotations = hierarchy.getAnnotationObjects()
+    
+    // Count annotations by class
+    def annotationCounts = [:]
+    annotations.each { annotation ->
+        def annotationClass = annotation.getPathClass()
+        def className = annotationClass != null ? annotationClass.toString() : "Unclassified"
+        annotationCounts[className] = annotationCounts.getOrDefault(className, 0) + 1
+    }
+    
+    // Write to CSV
+    annotationCounts.each { key, value ->
+        outputFile.append("${imageName},${key},${value}\n")
+    }
+}
+
+print "Annotation counts saved to: ${outputFile}"
+

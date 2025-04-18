@@ -1,0 +1,29 @@
+import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.gui.QuPathGUI
+
+def project = QuPathGUI.getInstance().getProject()
+def imageData = getCurrentImageData()
+def hierarchy = imageData.getHierarchy()
+
+def annotations = hierarchy.getAnnotationObjects()
+
+def targetName = "INV"
+def newName = "IN"
+
+def changed = 0
+
+for (annotation in annotations) {
+    def name = annotation.getDisplayedName()
+    if (name == targetName) {
+        annotation.setName(newName)
+        changed++
+    }
+}
+
+if (changed > 0) {
+    println "Renamed ${changed} annotations from '${targetName}' to '${newName}'."
+} else {
+    println "No annotations found with the name '${targetName}'."
+}
+
+fireHierarchyUpdate()
