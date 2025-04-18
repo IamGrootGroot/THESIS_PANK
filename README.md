@@ -1,34 +1,114 @@
 # THESIS_PANK - Cell Segmentation and Analysis Pipeline
 
-This repository contains scripts for cell segmentation and analysis using QuPath and StarDist.
+This repository contains a complete pipeline for cell segmentation, feature extraction, and analysis of H&E stained tissue images using QuPath and deep learning models.
 
-## Project Structure
+## Repository Description
 
-- `01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`: StarDist-based cell segmentation script
-- `02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`: Cell-centered tiling script for patch extraction
+This repository implements a comprehensive workflow for analyzing histopathological images, specifically designed for H&E stained tissue sections. The pipeline combines traditional image processing with state-of-the-art deep learning techniques to perform cell segmentation, feature extraction, and clustering analysis. The code is modular, well-documented, and designed to be easily adaptable to different tissue types and staining protocols.
+
+## Pipeline Overview
+
+The analysis pipeline consists of five main steps:
+
+### 1. Cell Segmentation (StarDist)
+- **Script**: `01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`
+- **Description**: Performs nucleus segmentation using StarDist, a deep learning-based segmentation model
+- **Features**:
+  - Automatic detection of cell nuclei
+  - Works with or without predefined annotations
+  - Configurable detection threshold and pixel size
+  - Includes shape and intensity measurements
+  - Progress tracking for large images
+
+### 2. Cell-Centered Tiling
+- **Script**: `02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`
+- **Description**: Extracts 224x224 pixel patches centered around detected cell centroids
+- **Features**:
+  - Organizes patches in subfolders by ROI
+  - Maintains 40x magnification resolution
+  - Includes boundary checking
+  - Progress tracking for large datasets
+  - Supports multiple image formats
+
+### 3. Feature Extraction (UNI2)
+- **Script**: `03_uni2_feature_extraction.py` and variants
+- **Description**: Extracts 1536-dimensional feature vectors from cell patches using UNI2-h model
+- **Features**:
+  - Utilizes state-of-the-art vision transformer
+  - Mixed precision processing for efficiency
+  - Batch processing with progress tracking
+  - Saves features in CSV format
+  - GPU acceleration support
+
+### 4. Dimensionality Reduction (UMAP)
+- **Script**: `04_05_umap_3d_kmeans30.py` and variants
+- **Description**: Reduces feature dimensions and performs clustering
+- **Features**:
+  - 3D UMAP visualization
+  - K-means clustering
+  - Memory-efficient processing options
+  - Interactive visualization with Plotly
+  - Multiple clustering configurations
+
+### 5. Analysis and Visualization
+- **Scripts**: Various analysis scripts
+- **Description**: Performs statistical analysis and generates visualizations
+- **Features**:
+  - Cluster analysis
+  - Spatial distribution mapping
+  - Statistical comparisons
+  - Custom visualization tools
 
 ## Requirements
 
 - QuPath 0.5.1 or later
 - StarDist extension for QuPath
-- Python 3.x (for future analysis scripts)
+- Python 3.x with the following packages:
+  - torch
+  - timm
+  - huggingface_hub
+  - pandas
+  - umap-learn
+  - scikit-learn
+  - plotly
+  - tqdm
 
 ## Installation
 
 1. Install QuPath from [qupath.github.io](https://qupath.github.io)
 2. Install StarDist extension through QuPath's Extension Manager
-3. Place the model file `he_heavy_augment.pb` in the specified directory
+3. Install Python dependencies:
+   ```bash
+   pip install torch timm huggingface-hub pandas umap-learn scikit-learn plotly tqdm
+   ```
+4. Place the model file `he_heavy_augment.pb` in the specified directory
 
 ## Usage
 
-1. Run the StarDist segmentation script (`01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`)
-2. Run the tiling script (`02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`)
+1. Run the StarDist segmentation script in QuPath
+2. Run the tiling script in QuPath
+3. Run the feature extraction script:
+   ```bash
+   python 03_uni2_feature_extraction.py
+   ```
+4. Run the UMAP and clustering script:
+   ```bash
+   python 04_05_umap_3d_kmeans30.py
+   ```
 
 ## Configuration
 
 Update the following paths in the scripts:
 - Model path in `01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`
 - Output directory in `02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`
+- Input/output paths in Python scripts
+
+## Performance Considerations
+
+- The pipeline is optimized for GPU acceleration
+- Memory-efficient options are available for large datasets
+- Progress tracking is implemented for long-running processes
+- Batch processing is used for feature extraction
 
 ## License
 
@@ -36,4 +116,10 @@ Update the following paths in the scripts:
 
 ## Contact
 
-[Add your contact information here] 
+[Add your contact information here]
+
+## Acknowledgments
+
+- StarDist for cell segmentation
+- UNI2-h model for feature extraction
+- QuPath for image analysis platform 
