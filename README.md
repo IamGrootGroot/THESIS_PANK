@@ -6,6 +6,19 @@ This repository contains a complete pipeline for cell segmentation, feature extr
 
 This repository implements a comprehensive workflow for analyzing histopathological images, specifically designed for H&E stained tissue sections. The pipeline combines traditional image processing with state-of-the-art deep learning techniques to perform cell segmentation, feature extraction, and clustering analysis. The code is modular, well-documented, and designed to be easily adaptable to different tissue types and staining protocols.
 
+## Configuration System
+
+The pipeline uses a centralized configuration system (`config.py`) that manages all paths and parameters. This makes it easy to:
+- Adapt the pipeline to different environments
+- Change parameters without modifying the scripts
+- Maintain consistent settings across the pipeline
+
+Key configuration options include:
+- Base directories for models, data, and output
+- Processing parameters (patch size, magnification, etc.)
+- Feature extraction settings
+- UMAP parameters
+
 ## Pipeline Overview
 
 The analysis pipeline consists of five main steps:
@@ -81,27 +94,39 @@ The analysis pipeline consists of five main steps:
    ```bash
    pip install torch timm huggingface-hub pandas umap-learn scikit-learn plotly tqdm
    ```
-4. Place the model file `he_heavy_augment.pb` in the specified directory
+4. Place the model file `he_heavy_augment.pb` in the `models` directory
+5. Configure paths and parameters in `config.py`
 
 ## Usage
 
-1. Run the StarDist segmentation script in QuPath
-2. Run the tiling script in QuPath
-3. Run the feature extraction script:
+1. Configure your environment in `config.py`
+2. Run the StarDist segmentation script in QuPath
+3. Run the tiling script in QuPath
+4. Run the feature extraction script:
    ```bash
    python 03_uni2_feature_extraction.py
    ```
-4. Run the UMAP and clustering script:
+5. Run the UMAP and clustering script:
    ```bash
    python 04_05_umap_3d_kmeans30.py
    ```
 
-## Configuration
+## Directory Structure
 
-Update the following paths in the scripts:
-- Model path in `01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`
-- Output directory in `02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`
-- Input/output paths in Python scripts
+```
+THESIS_PANK/
+├── config.py              # Configuration file
+├── models/                # Model files
+├── data/                  # Input data
+│   ├── patches/          # Extracted patches
+│   ├── embeddings/       # Feature embeddings
+│   └── visualizations/   # Generated visualizations
+├── output/               # Output directories
+│   ├── tiles/           # Extracted tiles
+│   ├── features/        # Extracted features
+│   └── umap/            # UMAP visualizations
+└── scripts/             # Analysis scripts
+```
 
 ## Performance Considerations
 
