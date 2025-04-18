@@ -32,6 +32,7 @@ The analysis pipeline consists of five main steps:
   - Configurable detection threshold and pixel size
   - Includes shape and intensity measurements
   - Progress tracking for large images
+
 <img width="807" alt="Screenshot 2025-04-16 at 21 49 12" src="https://github.com/user-attachments/assets/1333fd42-a9cd-4d6a-87b3-e1361cd1c143" />
 
 
@@ -44,8 +45,11 @@ The analysis pipeline consists of five main steps:
   - Includes boundary checking
   - Progress tracking for large datasets
   - Supports multiple image formats
+
 ![ROI_1_54001_28458_010583](https://github.com/user-attachments/assets/1c6a8d3f-0261-47d3-8a64-fdbbfb056ff6)
 ![ROI_1_13946_8093_039127](https://github.com/user-attachments/assets/1fdb616d-7e26-4c41-9613-8fb96fe65382)
+![ROI_1_49214_31857_073869](https://github.com/user-attachments/assets/3a971a20-db54-475d-9771-0e0cd0e373c9)
+
 
 
 ### 3. Feature Extraction (UNI2)
