@@ -12,6 +12,8 @@ import qupath.lib.images.writers.ImageWriterTools
 import qupath.lib.regions.RegionRequest
 import qupath.lib.common.GeneralTools
 import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.objects.PathObject
+import qupath.lib.objects.PathDetectionObject
 import qupath.lib.images.ImageData
 import qupath.lib.projects.Project
 import qupath.lib.images.servers.ImageServerProvider
@@ -65,14 +67,14 @@ def calculateDownsample(ImageServer server) {
 }
 
 /**
- * Checks if annotations have detections
- * @param annotations List of annotation objects to check
- * @return boolean indicating if any annotations have child objects
+ * Gets all detections in the hierarchy, regardless of parent
+ * @param hierarchy The object hierarchy to search
+ * @return List of detection objects
  */
-def hasDetections(annotations) {
-    return annotations.any { annotation -> 
-        !annotation.getChildObjects().isEmpty() 
-    }
+def getAllDetections(imageData) {
+    def hierarchy = imageData.getHierarchy()
+    // Get all detections directly rather than looking for children of annotations
+    return hierarchy.getObjects().findAll { it.isDetection() }
 }
 
 /**
@@ -129,94 +131,68 @@ def runPatchExtraction() {
     def patchSize = (int)(PATCH_SIZE * downsample)
     def halfPatchSize = (int)(PATCH_SIZE / 2 * downsample)
     
-    // Process annotations
-    def annotations = imageData.getHierarchy().getAnnotationObjects()
-    def totalROIs = annotations.size()
+    // Get all detections directly (rather than through annotations)
+    def detections = getAllDetections(imageData)
+    def totalCells = detections.size()
     
-    // Check if annotations exist
-    if (annotations.isEmpty()) {
-        print "Error: No annotations found. Please run the cell detection script first."
+    if (totalCells == 0) {
+        print "Error: No cell detections found in the image. Please run the cell detection script first."
         return
     }
     
-    // Check if annotations have detections
-    if (!hasDetections(annotations)) {
-        print "Error: No cell detections found in any annotations. Please run the cell detection script first."
-        return
+    print "Found ${totalCells} cell detections in the image"
+    
+    // Process each detection
+    def processedCells = 0
+    def counter = 0
+    
+    // Create a default folder for all cells
+    def cellsOutputDir = new File(outputDir, "all_cells")
+    if (!cellsOutputDir.exists()) {
+        cellsOutputDir.mkdirs()
     }
     
-    def processedROIs = 0
-    def totalExtractedPatches = 0
-    
-    for (annotation in annotations) {
-        processedROIs++
-        def annotationName = annotation.getName() ?: "ROI_${annotations.indexOf(annotation) + 1}"
+    for (detection in detections) {
+        processedCells++
+        def centroidX = (int)detection.getROI().getCentroidX()
+        def centroidY = (int)detection.getROI().getCentroidY()
         
-        // Create subfolder for this annotation
-        def annotationOutputDir = new File(outputDir, annotationName)
-        if (!annotationOutputDir.exists()) {
-            annotationOutputDir.mkdirs()
+        // Calculate patch coordinates
+        def x = centroidX - halfPatchSize
+        def y = centroidY - halfPatchSize
+        
+        // Check boundaries and save patch
+        if (x >= 0 && y >= 0 && x + patchSize <= imageWidth && y + patchSize <= imageHeight) {
+            def region = RegionRequest.createInstance(
+                server.getPath(),
+                downsample,
+                x,
+                y,
+                patchSize,
+                patchSize
+            )
+            
+            def outputFile = new File(
+                cellsOutputDir,
+                String.format("cell_%d_%d_%06d.jpg", centroidX, centroidY, counter)
+            )
+            
+            ImageWriterTools.writeImageRegion(server, region, outputFile.getAbsolutePath())
+            counter++
         }
         
-        // Process detections
-        def detections = annotation.getChildObjects().findAll { it.isDetection() }
-        def totalCells = detections.size()
-        
-        if (totalCells == 0) {
-            print "No detections found in ROI ${processedROIs}/${totalROIs} (${annotationName}) - skipping"
-            continue
+        // Report progress
+        if (processedCells % Math.max(100, (int)(totalCells/10)) == 0 || processedCells == totalCells) {
+            def progress = (processedCells / totalCells * 100).round(1)
+            print "Progress: ${progress}% (${processedCells}/${totalCells} cells processed)"
         }
-        
-        def processedCells = 0
-        def counter = 0
-        
-        print "Processing ROI ${processedROIs}/${totalROIs} (${annotationName}) - ${totalCells} cells to process"
-        
-        for (detection in detections) {
-            processedCells++
-            def centroidX = (int)detection.getROI().getCentroidX()
-            def centroidY = (int)detection.getROI().getCentroidY()
-            
-            // Calculate patch coordinates
-            def x = centroidX - halfPatchSize
-            def y = centroidY - halfPatchSize
-            
-            // Check boundaries and save patch
-            if (x >= 0 && y >= 0 && x + patchSize <= imageWidth && y + patchSize <= imageHeight) {
-                def region = RegionRequest.createInstance(
-                    server.getPath(),
-                    downsample,
-                    x,
-                    y,
-                    patchSize,
-                    patchSize
-                )
-                
-                def outputFile = new File(
-                    annotationOutputDir,
-                    String.format("%s_%d_%d_%06d.jpg", annotationName, centroidX, centroidY, counter)
-                )
-                
-                ImageWriterTools.writeImageRegion(server, region, outputFile.getAbsolutePath())
-                counter++
-                totalExtractedPatches++
-            }
-            
-            // Report progress
-            if (processedCells % Math.max(100, (int)(totalCells/10)) == 0 || processedCells == totalCells) {
-                def progress = (processedCells / totalCells * 100).round(1)
-                print "ROI ${processedROIs}/${totalROIs} - Progress: ${progress}% (${processedCells}/${totalCells} cells processed)"
-            }
-        }
-        
-        print "Total patches saved for ${annotationName}: ${counter}"
     }
     
     // Save any changes to the project
     saveImageData(imageData)
     
-    if (totalExtractedPatches > 0) {
-        print "Patch extraction completed. Processed ${processedROIs} ROIs and extracted ${totalExtractedPatches} patches in total."
+    if (counter > 0) {
+        print "Patch extraction completed. Extracted ${counter} patches from ${totalCells} detected cells."
     } else {
         print "Patch extraction completed but no patches were extracted. Please check that cell detection was successful."
     }
