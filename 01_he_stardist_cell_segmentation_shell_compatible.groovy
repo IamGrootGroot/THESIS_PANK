@@ -164,21 +164,29 @@ def runCellDetection() {
         def stardist = createStarDistModel(args.modelPath)
         def totalAnnotations = annotations.size()
         def processedAnnotations = 0
+        def totalDetections = 0
 
         // Run detection on annotations
         annotations.each { annotation ->
             print "Processing annotation ${++processedAnnotations}/${totalAnnotations}: ${annotation.getName() ?: 'Unnamed'}"
             
-            def detections = stardist.detectObjects(imageData, annotation)
+            // Get the ROI from the annotation - this is the correct argument for StarDist
+            def roi = annotation.getROI()
+            
+            // Use the correct method signature: detectObjects(imageData, roi)
+            def detections = stardist.detectObjects(imageData, roi)
+            
+            // Add all detected cells to the hierarchy
             detections.each { detection ->
                 hierarchy.addObject(detection)
+                totalDetections++
             }
             
             print "Added ${detections.size()} cell detections to annotation ${annotation.getName() ?: 'Unnamed'}"
         }
 
         // Save results
-        print "Finalizing detection results..."
+        print "Finalizing detection results with $totalDetections total cells detected..."
         fireHierarchyUpdate()
         
         // Explicitly save to project
