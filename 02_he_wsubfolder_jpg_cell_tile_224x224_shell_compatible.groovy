@@ -65,6 +65,40 @@ def calculateDownsample(ImageServer server) {
 }
 
 /**
+ * Checks if annotations have detections
+ * @param annotations List of annotation objects to check
+ * @return boolean indicating if any annotations have child objects
+ */
+def hasDetections(annotations) {
+    return annotations.any { annotation -> 
+        !annotation.getChildObjects().isEmpty() 
+    }
+}
+
+/**
+ * Explicitly save the current image data to the project
+ * @param imageData The current image data to save
+ */
+def saveImageData(imageData) {
+    def project = getProject()
+    if (project == null) {
+        print "Error: Cannot save - no project available"
+        return
+    }
+    
+    def entry = project.getEntry(imageData)
+    if (entry == null) {
+        print "Error: Cannot save - no project entry found for current image"
+        return
+    }
+    
+    print "Saving changes to project..."
+    entry.saveImageData(imageData)
+    project.syncChanges()
+    print "Project saved successfully"
+}
+
+/**
  * Main execution function for patch extraction
  */
 def runPatchExtraction() {
@@ -98,7 +132,21 @@ def runPatchExtraction() {
     // Process annotations
     def annotations = imageData.getHierarchy().getAnnotationObjects()
     def totalROIs = annotations.size()
+    
+    // Check if annotations exist
+    if (annotations.isEmpty()) {
+        print "Error: No annotations found. Please run the cell detection script first."
+        return
+    }
+    
+    // Check if annotations have detections
+    if (!hasDetections(annotations)) {
+        print "Error: No cell detections found in any annotations. Please run the cell detection script first."
+        return
+    }
+    
     def processedROIs = 0
+    def totalExtractedPatches = 0
     
     for (annotation in annotations) {
         processedROIs++
@@ -113,6 +161,12 @@ def runPatchExtraction() {
         // Process detections
         def detections = annotation.getChildObjects().findAll { it.isDetection() }
         def totalCells = detections.size()
+        
+        if (totalCells == 0) {
+            print "No detections found in ROI ${processedROIs}/${totalROIs} (${annotationName}) - skipping"
+            continue
+        }
+        
         def processedCells = 0
         def counter = 0
         
@@ -145,6 +199,7 @@ def runPatchExtraction() {
                 
                 ImageWriterTools.writeImageRegion(server, region, outputFile.getAbsolutePath())
                 counter++
+                totalExtractedPatches++
             }
             
             // Report progress
@@ -157,7 +212,14 @@ def runPatchExtraction() {
         print "Total patches saved for ${annotationName}: ${counter}"
     }
     
-    print "Patch extraction completed. Processed ${processedROIs} ROIs in total."
+    // Save any changes to the project
+    saveImageData(imageData)
+    
+    if (totalExtractedPatches > 0) {
+        print "Patch extraction completed. Processed ${processedROIs} ROIs and extracted ${totalExtractedPatches} patches in total."
+    } else {
+        print "Patch extraction completed but no patches were extracted. Please check that cell detection was successful."
+    }
 }
 
 // Execute the main function

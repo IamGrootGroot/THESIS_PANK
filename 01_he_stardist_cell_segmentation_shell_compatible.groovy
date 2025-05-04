@@ -11,6 +11,9 @@ import qupath.ext.stardist.StarDist2D
 import qupath.lib.images.ImageData
 import qupath.lib.projects.Project
 import qupath.lib.images.servers.ImageServerProvider
+import qupath.lib.roi.ROIs
+import qupath.lib.objects.PathObjects
+import qupath.lib.regions.ImagePlane
 
 // Configuration parameters for StarDist2D cell segmentation
 // Declare at script level (not inside a class definition or method)
@@ -84,6 +87,45 @@ def createStarDistModel(String modelPath) {
 }
 
 /**
+ * Creates a full image annotation
+ * @param imageData The current image data
+ * @return The created annotation object
+ */
+def createFullImageAnnotation(imageData) {
+    def server = imageData.getServer()
+    def width = server.getWidth()
+    def height = server.getHeight()
+    def roi = ROIs.createRectangleROI(0, 0, width, height, ImagePlane.getDefaultPlane())
+    def annotation = PathObjects.createAnnotationObject(roi, PathClass.fromString("Tissue"))
+    annotation.setName("Whole Image")
+    imageData.getHierarchy().addObject(annotation)
+    return annotation
+}
+
+/**
+ * Explicitly save the current image data to the project
+ * @param imageData The current image data to save
+ */
+def saveImageData(imageData) {
+    def project = getProject()
+    if (project == null) {
+        print "Error: Cannot save - no project available"
+        return
+    }
+    
+    def entry = project.getEntry(imageData)
+    if (entry == null) {
+        print "Error: Cannot save - no project entry found for current image"
+        return
+    }
+    
+    print "Saving changes to project..."
+    entry.saveImageData(imageData)
+    project.syncChanges()
+    print "Project saved successfully"
+}
+
+/**
  * Main execution function for cell detection
  */
 def runCellDetection() {
@@ -112,8 +154,8 @@ def runCellDetection() {
     // Create full image annotation if none exists
     if (annotations.isEmpty()) {
         print "No annotations found. Creating full image annotation..."
-        createFullImageAnnotation(true)
-        annotations = hierarchy.getAnnotationObjects()
+        def wholeImageAnnotation = createFullImageAnnotation(imageData)
+        annotations = [wholeImageAnnotation]
     }
 
     print "Running StarDist detection on the current image..."
@@ -124,22 +166,28 @@ def runCellDetection() {
         def processedAnnotations = 0
 
         // Run detection on annotations
-        stardist.detectObjects(imageData, annotations).each { detection ->
-            hierarchy.addObject(detection, true)
-            processedAnnotations++
+        annotations.each { annotation ->
+            print "Processing annotation ${++processedAnnotations}/${totalAnnotations}: ${annotation.getName() ?: 'Unnamed'}"
             
-            // Report progress
-            if (processedAnnotations % Math.max(100, totalAnnotations/10) == 0 || processedAnnotations == totalAnnotations) {
-                def progress = (processedAnnotations / totalAnnotations * 100).round(1)
-                print "Progress: ${progress}% (${processedAnnotations}/${totalAnnotations} annotations processed)"
+            def detections = stardist.detectObjects(imageData, annotation)
+            detections.each { detection ->
+                hierarchy.addObject(detection)
             }
+            
+            print "Added ${detections.size()} cell detections to annotation ${annotation.getName() ?: 'Unnamed'}"
         }
 
         // Save results
+        print "Finalizing detection results..."
         fireHierarchyUpdate()
+        
+        // Explicitly save to project
+        saveImageData(imageData)
+        
         print "Completed detection for the current image."
     } catch (Exception e) {
         print "Error during detection: " + e.getMessage()
+        e.printStackTrace()
     }
 }
 

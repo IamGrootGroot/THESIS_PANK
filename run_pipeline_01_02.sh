@@ -169,6 +169,57 @@ log "Created output directory: $OUTPUT_DIR"
 # =============================================================================
 log "Processing all images in the QuPath project..."
 
+# Create Groovy script that creates full-image annotations for all images
+SETUP_SCRIPT=$(mktemp)
+cat > "$SETUP_SCRIPT" << 'EOL'
+import qupath.lib.roi.ROIs
+import qupath.lib.objects.PathObjects
+import qupath.lib.regions.ImagePlane
+import qupath.lib.objects.classes.PathClass
+
+// Process all images in project
+def project = getProject()
+if (project == null) {
+    print "Error: No project found"
+    return
+}
+
+// Ensure all images have annotations
+for (entry in project.getImageList()) {
+    def imageData = entry.readImageData()
+    def hierarchy = imageData.getHierarchy()
+    def annotations = hierarchy.getAnnotationObjects()
+    
+    if (annotations.isEmpty()) {
+        print "Creating full image annotation for " + entry.getImageName()
+        def server = imageData.getServer()
+        def width = server.getWidth()
+        def height = server.getHeight()
+        def roi = ROIs.createRectangleROI(0, 0, width, height, ImagePlane.getDefaultPlane())
+        def annotation = PathObjects.createAnnotationObject(roi, PathClass.fromString("Tissue"))
+        annotation.setName("Whole Image")
+        hierarchy.addObject(annotation)
+        entry.saveImageData(imageData)
+    } else {
+        print "Annotations already exist for " + entry.getImageName()
+    }
+}
+
+// Sync changes to the project
+project.syncChanges()
+print "Setup completed successfully"
+EOL
+
+# Run the setup script to ensure all images have annotations
+log "Setting up annotations for all images in the project..."
+if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" -f "$SETUP_SCRIPT" > "$QUPATH_LOG" 2>&1; then
+    error_log "Failed to setup annotations"
+    rm -f "$SETUP_SCRIPT"
+    exit 1
+fi
+rm -f "$SETUP_SCRIPT"
+log "Annotation setup completed successfully"
+
 # Step 1: Run cell segmentation on all images in the project
 log "Executing Cell Segmentation (StarDist) on all images"
 if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
@@ -179,6 +230,10 @@ if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
     exit 1
 fi
 log "Cell segmentation completed successfully"
+
+# Allow QuPath to fully save changes
+log "Waiting for QuPath to save project changes..."
+sleep 5
 
 # Step 2: Run tile extraction on all images in the project
 log "Executing Cell Tile Extraction on all images"
