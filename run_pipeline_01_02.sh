@@ -165,64 +165,30 @@ mkdir -p "$OUTPUT_DIR"
 log "Created output directory: $OUTPUT_DIR"
 
 # =============================================================================
-# Manually Define Images to Process
+# Process All Images in Project
 # =============================================================================
-log "Preparing to process images from the project"
+log "Processing all images in the QuPath project..."
 
-# Instead of trying to parse QuPath output, ask for user input
-read -p "Enter the number of images to process: " TOTAL_IMAGES
-echo
-
-if [[ ! "$TOTAL_IMAGES" =~ ^[0-9]+$ ]] || [ "$TOTAL_IMAGES" -eq 0 ]; then
-    error_log "Invalid number of images. Please enter a positive integer."
+# Step 1: Run cell segmentation on all images in the project
+log "Executing Cell Segmentation (StarDist) on all images"
+if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                --args="model=$MODEL_PATH" \
+                01_he_stardist_cell_segmentation_shell_compatible.groovy \
+                > "$QUPATH_LOG" 2>&1; then
+    error_log "Cell segmentation failed"
     exit 1
 fi
+log "Cell segmentation completed successfully"
 
-IMAGE_NAMES=()
-for ((i=1; i<=TOTAL_IMAGES; i++)); do
-    read -p "Enter the name of image $i: " image_name
-    IMAGE_NAMES+=("$image_name")
-done
-
-log "Will process $TOTAL_IMAGES images"
-echo
-
-# =============================================================================
-# Main Pipeline Execution
-# =============================================================================
-# Process each image in the project
-current_image=0
-
-for image_name in "${IMAGE_NAMES[@]}"; do
-    current_image=$((current_image + 1))
-    
-    echo -e "\033[1;36mProcessing image $current_image of $TOTAL_IMAGES: $image_name\033[0m"
-    
-    # Step 1: Cell Segmentation using StarDist
-    log "Starting cell segmentation for $image_name"
-    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
-                    --image="$image_name" \
-                    --args="model=$MODEL_PATH" \
-                    01_he_stardist_cell_segmentation_shell_compatible.groovy \
-                    > "$QUPATH_LOG" 2>&1; then
-        error_log "Cell segmentation failed for $image_name"
-        continue
-    fi
-    
-    # Step 2: Cell Tile Extraction
-    log "Starting cell tile extraction for $image_name"
-    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
-                    --image="$image_name" \
-                    02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
-                    > "$QUPATH_LOG" 2>&1; then
-        error_log "Cell tile extraction failed for $image_name"
-        continue
-    fi
-    
-    # Update progress bar
-    progress_bar $current_image $TOTAL_IMAGES
-    echo
-done
+# Step 2: Run tile extraction on all images in the project
+log "Executing Cell Tile Extraction on all images"
+if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
+                > "$QUPATH_LOG" 2>&1; then
+    error_log "Cell tile extraction failed"
+    exit 1
+fi
+log "Cell tile extraction completed successfully"
 
 # =============================================================================
 # Pipeline Completion
@@ -232,7 +198,7 @@ echo -e "\033[1;32m===============================================\033[0m"
 echo -e "\033[1;32m           Pipeline Execution Complete         \033[0m"
 echo -e "\033[1;32m===============================================\033[0m"
 log "Pipeline execution completed"
-log "Successfully processed $current_image images"
+log "Successfully processed all images in the project"
 log "Check $LOG_FILE for detailed logs"
 log "Check $ERROR_LOG for error logs"
 log "QuPath verbose output is in $QUPATH_LOG" 
