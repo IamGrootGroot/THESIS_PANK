@@ -169,18 +169,24 @@ log "Created output directory: $OUTPUT_DIR"
 # =============================================================================
 log "Getting list of images from the project..."
 
-# Use QuPath headless to list images in the project and redirect verbose output to log file
-IMAGE_LIST=$(
-  "$QUPATH_PATH" headless script --args="projectPath=$PROJECT_PATH" -e "
-    import qupath.lib.projects.ProjectIO
-    import java.awt.image.BufferedImage
+# Create a temporary file for the Groovy script
+GROOVY_SCRIPT=$(mktemp)
+cat > "$GROOVY_SCRIPT" << 'EOL'
+import qupath.lib.projects.ProjectIO
+import java.awt.image.BufferedImage
 
-    def project = ProjectIO.loadProject(new File(args[0].substring(12)), BufferedImage.class)
-    def imageList = project.getImageList()
-    println '${imageList.size()}'
-    imageList.each { entry -> println entry.getImageName() }
-  " 2> "$QUPATH_LOG" | grep -v "INFO" | tail -n +1  # Skip the INFO log lines
-)
+def projectPath = args[0].substring(12)
+def project = ProjectIO.loadProject(new File(projectPath), BufferedImage.class)
+def imageList = project.getImageList()
+println(imageList.size())
+imageList.each { entry -> println(entry.getImageName()) }
+EOL
+
+# Use QuPath headless to list images in the project and redirect verbose output to log file
+IMAGE_LIST=$("$QUPATH_PATH" headless script --args="projectPath=$PROJECT_PATH" -f "$GROOVY_SCRIPT" 2> "$QUPATH_LOG" | grep -v "INFO" | tail -n +1)
+
+# Clean up the temporary file
+rm -f "$GROOVY_SCRIPT"
 
 # Extract number of images and names
 TOTAL_IMAGES=$(echo "$IMAGE_LIST" | head -n 1)
@@ -192,7 +198,7 @@ if [ -z "$TOTAL_IMAGES" ] || [ "$TOTAL_IMAGES" -eq 0 ] || [ ${#IMAGE_NAMES[@]} -
     exit 1
 fi
 
-log "Found $TOTAL_IMAGES images in the project: ${IMAGE_NAMES[*]}"
+log "Found $TOTAL_IMAGES images in the project"
 echo
 
 # =============================================================================
