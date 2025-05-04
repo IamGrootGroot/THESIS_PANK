@@ -29,14 +29,10 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH    Path to QuPath project file (.qpproj)"
     echo "  -m, --model PATH      Path to StarDist model file (.pb)"
-    echo "  -f, --force           Force reprocessing even if cells/tiles already exist"
-    echo "  -o, --output PATH     Custom output directory for tiles (default: output/tiles)"
-    echo "  -s, --skip-detection  Skip cell detection, only extract tiles"
-    echo "  -t, --skip-tiles      Skip tile extraction, only detect cells"
-    echo "  -h, --help            Show this help message"
+    echo "  -h, --help           Show this help message"
     echo
     echo "Example:"
-    echo "  $0 -p /path/to/project.qpproj -m /path/to/model.pb -f"
+    echo "  $0 -p /path/to/project.qpproj -m /path/to/model.pb"
     echo
     echo "Note: All paths are required. The script will validate their existence."
     echo "IMPORTANT: Images must be already added to the QuPath project through the GUI."
@@ -98,10 +94,6 @@ exec 2> >(tee -a "$LOG_FILE" "$ERROR_LOG" >&2)
 # Initialize variables
 PROJECT_PATH=""
 MODEL_PATH=""
-FORCE_REPROCESSING=false
-OUTPUT_DIR="output/tiles"
-SKIP_DETECTION=false
-SKIP_TILES=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -113,22 +105,6 @@ while [[ $# -gt 0 ]]; do
         -m|--model)
             MODEL_PATH="$2"
             shift 2
-            ;;
-        -f|--force)
-            FORCE_REPROCESSING=true
-            shift
-            ;;
-        -o|--output)
-            OUTPUT_DIR="$2"
-            shift 2
-            ;;
-        -s|--skip-detection)
-            SKIP_DETECTION=true
-            shift
-            ;;
-        -t|--skip-tiles)
-            SKIP_TILES=true
-            shift
             ;;
         -h|--help)
             show_help
@@ -146,12 +122,6 @@ if [ -z "$PROJECT_PATH" ] || [ -z "$MODEL_PATH" ]; then
     show_help
 fi
 
-# Check for conflicting options
-if [ "$SKIP_DETECTION" = true ] && [ "$SKIP_TILES" = true ]; then
-    error_log "Cannot skip both detection and tile extraction. At least one step must be executed."
-    exit 1
-fi
-
 # =============================================================================
 # Pipeline Initialization
 # =============================================================================
@@ -166,16 +136,6 @@ echo
 log "Starting pipeline execution"
 log "Project path: $PROJECT_PATH"
 log "Model path: $MODEL_PATH"
-log "Output directory: $OUTPUT_DIR"
-if [ "$FORCE_REPROCESSING" = true ]; then
-    log "Force reprocessing: Enabled"
-fi
-if [ "$SKIP_DETECTION" = true ]; then
-    log "Cell detection: Skipped"
-fi
-if [ "$SKIP_TILES" = true ]; then
-    log "Tile extraction: Skipped"
-fi
 echo
 
 # =============================================================================
@@ -200,6 +160,7 @@ echo
 # =============================================================================
 # Create Output Directory
 # =============================================================================
+OUTPUT_DIR="output/tiles"
 mkdir -p "$OUTPUT_DIR"
 log "Created output directory: $OUTPUT_DIR"
 
@@ -260,55 +221,29 @@ rm -f "$SETUP_SCRIPT"
 log "Annotation setup completed successfully"
 
 # Step 1: Run cell segmentation on all images in the project
-if [ "$SKIP_DETECTION" = false ]; then
-    log "Executing Cell Segmentation (StarDist) on all images"
-    
-    # Configure force parameter if needed
-    FORCE_ARG=""
-    if [ "$FORCE_REPROCESSING" = true ]; then
-        FORCE_ARG="force=true"
-    fi
-    
-    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
-                    --args="model=$MODEL_PATH $FORCE_ARG" \
-                    01_he_stardist_cell_segmentation_shell_compatible.groovy \
-                    > "$QUPATH_LOG" 2>&1; then
-        error_log "Cell segmentation failed"
-        exit 1
-    fi
-    log "Cell segmentation completed successfully"
-    
-    # Allow QuPath to fully save changes
-    log "Waiting for QuPath to save project changes..."
-    sleep 5
-else
-    log "Skipping cell detection as requested"
+log "Executing Cell Segmentation (StarDist) on all images"
+if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                --args="model=$MODEL_PATH" \
+                01_he_stardist_cell_segmentation_shell_compatible.groovy \
+                > "$QUPATH_LOG" 2>&1; then
+    error_log "Cell segmentation failed"
+    exit 1
 fi
+log "Cell segmentation completed successfully"
+
+# Allow QuPath to fully save changes
+log "Waiting for QuPath to save project changes..."
+sleep 5
 
 # Step 2: Run tile extraction on all images in the project
-if [ "$SKIP_TILES" = false ]; then
-    log "Executing Cell Tile Extraction on all images"
-    
-    # Configure force and output parameters
-    ARGS=""
-    if [ "$FORCE_REPROCESSING" = true ]; then
-        ARGS="force=true"
-    fi
-    if [ -n "$OUTPUT_DIR" ]; then
-        ARGS="$ARGS output=$OUTPUT_DIR"
-    fi
-    
-    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
-                    --args="$ARGS" \
-                    02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
-                    > "$QUPATH_LOG" 2>&1; then
-        error_log "Cell tile extraction failed"
-        exit 1
-    fi
-    log "Cell tile extraction completed successfully"
-else
-    log "Skipping tile extraction as requested"
+log "Executing Cell Tile Extraction on all images"
+if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
+                > "$QUPATH_LOG" 2>&1; then
+    error_log "Cell tile extraction failed"
+    exit 1
 fi
+log "Cell tile extraction completed successfully"
 
 # =============================================================================
 # Pipeline Completion
@@ -321,4 +256,4 @@ log "Pipeline execution completed"
 log "Successfully processed all images in the project"
 log "Check $LOG_FILE for detailed logs"
 log "Check $ERROR_LOG for error logs"
-log "Check $QUPATH_LOG for QuPath verbose output" 
+log "QuPath verbose output is in $QUPATH_LOG" 

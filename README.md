@@ -12,7 +12,6 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ├── 04_05_umap_3d_kmeans30.py
 ├── run_pipeline_01_02.sh
 ├── run_pipeline_03.sh
-├── models/
 └── logs/
 ```
 
@@ -23,7 +22,6 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 - Extracts 224x224 pixel tiles around detected cells
 - Implemented in Groovy scripts for QuPath
 - Automated via `run_pipeline_01_02.sh`
-- Includes robust error handling and option to skip reprocessing
 
 ### 2. Feature Extraction (Step 3)
 - Uses UNI2-h model from HuggingFace for feature extraction
@@ -90,38 +88,11 @@ chmod +x run_pipeline_01_02.sh
 ./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb
 ```
 
-#### Available Options:
-```
--p, --project PATH    Path to QuPath project file (.qpproj)
--m, --model PATH      Path to StarDist model file (.pb)
--f, --force           Force reprocessing even if cells/tiles already exist
--o, --output PATH     Custom output directory for tiles (default: output/tiles)
--s, --skip-detection  Skip cell detection, only extract tiles
--t, --skip-tiles      Skip tile extraction, only detect cells
--h, --help            Show this help message
-```
-
-#### Examples:
-```bash
-# Force reprocessing even if cells/tiles already exist
-./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb -f
-
-# Skip cell detection (only extract tiles from existing detections)
-./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb -s
-
-# Skip tile extraction (only detect cells)
-./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb -t
-
-# Specify custom output directory
-./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb -o /custom/output/path
-```
-
 This will:
 - Process all images already added to the QuPath project
 - Perform cell segmentation using StarDist
 - Extract 224x224 pixel tiles around detected cells
 - Save logs in the `logs/` directory
-- Skip existing detections or tiles unless forced to reprocess
 
 ### Running Feature Extraction
 ```bash
@@ -155,10 +126,7 @@ This will:
 - The pipeline will automatically detect and process all images in the project
 
 ### Script Improvements
-- Robust error handling at multiple levels
-- Intelligent handling of existing cell detections and tiles
-- Command-line options to customize processing behavior
-- Performance metrics (timing for detection and extraction)
+- Improved error handling and logging
 - Separate log files for general execution, errors, and QuPath output
 - Progress tracking with visual indicators
 - Better command-line argument parsing
@@ -167,7 +135,7 @@ This will:
 
 ### Cell Segmentation and Tile Extraction
 - Processed QuPath project with cell annotations
-- Extracted cell tiles in JPG format (saved in `output/tiles/[image_name]/all_cells/` by default)
+- Extracted cell tiles in JPG format
 - Log files in `logs/` directory:
   - `pipeline_YYYYMMDD_HHMMSS.log`: General execution log
   - `pipeline_YYYYMMDD_HHMMSS_error.log`: Error log
@@ -186,21 +154,13 @@ This will:
 - Static visualization plots (PNG format)
 - UMAP coordinates and cluster labels
 
-## Error Handling and Reprocessing Logic
+## Error Handling
 
-### Cell Detection
-- Automatically checks for existing detections
-- Option to keep existing cells or force redetection
-- Granular error handling at the detection and annotation levels
-- Performance timing and reporting
-- Boundary condition handling
-
-### Tile Extraction
-- Checks for existing tiles before extraction
-- Option to keep or regenerate existing tiles
-- Automatically skips cells at image boundaries
-- Reports detailed statistics (processed cells, failed extractions)
-- Performance timing for extraction process
+Both scripts include comprehensive error handling:
+- Automatic logging of all operations
+- Detailed error messages
+- Graceful failure handling
+- Log files for debugging
 
 ## Contributing
 
