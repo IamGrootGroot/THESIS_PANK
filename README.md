@@ -1,159 +1,173 @@
-# THESIS_PANK - Cell Segmentation and Analysis Pipeline
+# PANK Thesis Project - Cell Analysis Pipeline
 
-This repository contains a complete pipeline for cell segmentation, feature extraction, and analysis of H&E stained tissue images using QuPath and deep learning models.
+This repository contains a comprehensive pipeline for cell analysis in H&E stained images, including cell segmentation, tile extraction, feature extraction, and clustering analysis using deep learning models.
 
-## Repository Description
+## Project Structure
 
-This repository implements a comprehensive workflow for analyzing histopathological images, specifically designed for H&E stained tissue sections. The pipeline combines traditional image processing with state-of-the-art deep learning techniques to perform cell segmentation, feature extraction, and clustering analysis. The code is modular, well-documented, and designed to be easily adaptable to different tissue types and staining protocols.
+```
+.
+├── 01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath.groovy
+├── 02_he_wsubfolder_jpg_cell_tile_224x224_qupath.groovy
+├── 03_uni2_feature_extraction_NEW2.py
+├── 04_05_umap_3d_kmeans30.py
+├── run_pipeline_01_02.sh
+├── run_pipeline_03.sh
+└── logs/
+```
 
-## Configuration System
+## Pipeline Components
 
-The pipeline uses a centralized configuration system (`config.py`) that manages all paths and parameters. This makes it easy to:
-- Adapt the pipeline to different environments
-- Change parameters without modifying the scripts
-- Maintain consistent settings across the pipeline
+### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
+- Uses QuPath and StarDist for cell segmentation
+- Extracts 224x224 pixel tiles around detected cells
+- Implemented in Groovy scripts for QuPath
+- Automated via `run_pipeline_01_02.sh`
 
-Key configuration options include:
-- Base directories for models, data, and output
-- Processing parameters (patch size, magnification, etc.)
-- Feature extraction settings
-- UMAP parameters
+### 2. Feature Extraction (Step 3)
+- Uses UNI2-h model from HuggingFace for feature extraction
+- Processes image tiles in batches
+- Saves embeddings to CSV format
+- Implemented in Python
+- Automated via `run_pipeline_03.sh`
 
-## Pipeline Overview
+### 3. Dimensionality Reduction and Clustering (Steps 4-5)
+- Uses UMAP for dimensionality reduction to 3D space
+- Performs K-means clustering (30 clusters)
+- Generates interactive 3D visualizations
+- Saves cluster assignments and visualization plots
+- Implemented in Python (`04_05_umap_3d_kmeans30.py`)
 
-The analysis pipeline consists of five main steps:
+## Prerequisites
 
-### 1. Cell Segmentation (StarDist)
-- **Script**: `01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath_NEW.txt`
-- **Description**: Performs nucleus segmentation using StarDist, a deep learning-based segmentation model
-- **Features**:
-  - Automatic detection of cell nuclei
-  - Works with or without predefined annotations
-  - Configurable detection threshold and pixel size
-  - Includes shape and intensity measurements
-  - Progress tracking for large images
+### System Requirements
+- Linux/Unix-based system
+- NVIDIA GPU with CUDA support (recommended)
+- Python 3.8+
+- QuPath 0.4.0+
 
-<img width="807" alt="Screenshot 2025-04-16 at 21 49 12" src="https://github.com/user-attachments/assets/1333fd42-a9cd-4d6a-87b3-e1361cd1c143" />
+### Python Dependencies
+```bash
+torch
+timm
+PIL
+pandas
+tqdm
+huggingface_hub
+umap-learn
+scikit-learn
+plotly
+```
 
+### External Dependencies
+- QuPath installation
+- StarDist model file (`he_heavy_augment.pb`)
+- HuggingFace account and API token
 
-### 2. Cell-Centered Tiling
-- **Script**: `02_he_wsubfolder_jpg_cell_tile_224x224_qupath_NEW2.txt`
-- **Description**: Extracts 224x224 pixel patches centered around detected cell centroids
-- **Features**:
-  - Organizes patches in subfolders by ROI
-  - Maintains 40x magnification resolution
-  - Includes boundary checking
-  - Progress tracking for large datasets
-  - Supports multiple image formats
+## Setup
 
-![ROI_1_54001_28458_010583](https://github.com/user-attachments/assets/1c6a8d3f-0261-47d3-8a64-fdbbfb056ff6)
-![ROI_1_13946_8093_039127](https://github.com/user-attachments/assets/1fdb616d-7e26-4c41-9613-8fb96fe65382)
-![ROI_1_49214_31857_073869](https://github.com/user-attachments/assets/3a971a20-db54-475d-9771-0e0cd0e373c9)
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
 
+2. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
 
+3. Configure the pipeline scripts:
+   - Update paths in `run_pipeline_01_02.sh`:
+     - `PROJECT_PATH`: Path to your QuPath project
+     - `MODEL_PATH`: Path to StarDist model
+     - `IMAGES_DIR`: Directory containing .ndpi images
 
-### 3. Feature Extraction (UNI2)
-- **Script**: `03_uni2_feature_extraction.py` and variants
-- **Description**: Extracts 1536-dimensional feature vectors from cell patches using UNI2-h model
-- **Features**:
-  - Utilizes state-of-the-art vision transformer
-  - Mixed precision processing for efficiency
-  - Batch processing with progress tracking
-  - Saves features in CSV format
-  - GPU acceleration support
-
-### 4. Dimensionality Reduction (UMAP)
-- **Script**: `04_05_umap_3d_kmeans30.py` and variants
-- **Description**: Reduces feature dimensions and performs clustering
-- **Features**:
-  - 3D UMAP visualization
-  - K-means clustering
-  - Memory-efficient processing options
-  - Interactive visualization with Plotly
-  - Multiple clustering configurations
-
-### 5. Analysis and Visualization
-- **Scripts**: Various analysis scripts
-- **Description**: Performs statistical analysis and generates visualizations
-- **Features**:
-  - Cluster analysis
-  - Spatial distribution mapping
-  - Statistical comparisons
-  - Custom visualization tools
-
-## Requirements
-
-- QuPath 0.5.1 or later
-- StarDist extension for QuPath
-- Python 3.x with the following packages:
-  - torch
-  - timm
-  - huggingface_hub
-  - pandas
-  - umap-learn
-  - scikit-learn
-  - plotly
-  - tqdm
-
-## Installation
-
-1. Install QuPath from [qupath.github.io](https://qupath.github.io)
-2. Install StarDist extension through QuPath's Extension Manager
-3. Install Python dependencies:
-   ```bash
-   pip install torch timm huggingface-hub pandas umap-learn scikit-learn plotly tqdm
-   ```
-4. Place the model file `he_heavy_augment.pb` in the `models` directory
-5. Configure paths and parameters in `config.py`
+   - Update configuration in `run_pipeline_03.sh`:
+     - `HF_TOKEN`: Your HuggingFace API token
+     - `IMAGE_DIR`: Directory containing extracted tiles
+     - `OUTPUT_CSV`: Desired output file name
 
 ## Usage
 
-1. Configure your environment in `config.py`
-2. Run the StarDist segmentation script in QuPath
-3. Run the tiling script in QuPath
-4. Run the feature extraction script:
-   ```bash
-   python 03_uni2_feature_extraction.py
-   ```
-5. Run the UMAP and clustering script:
-   ```bash
-   python 04_05_umap_3d_kmeans30.py
-   ```
-
-## Directory Structure
-
-```
-THESIS_PANK/
-├── config.py              # Configuration file
-├── models/                # Model files
-├── data/                  # Input data
-│   ├── patches/          # Extracted patches
-│   ├── embeddings/       # Feature embeddings
-│   └── visualizations/   # Generated visualizations
-├── output/               # Output directories
-│   ├── tiles/           # Extracted tiles
-│   ├── features/        # Extracted features
-│   └── umap/            # UMAP visualizations
-└── scripts/             # Analysis scripts
+### Running Cell Segmentation and Tile Extraction
+```bash
+chmod +x run_pipeline_01_02.sh
+./run_pipeline_01_02.sh
 ```
 
-## Performance Considerations
+This will:
+- Process all .ndpi files in the specified directory
+- Perform cell segmentation using StarDist
+- Extract 224x224 pixel tiles around detected cells
+- Save logs in the `logs/` directory
 
-- The pipeline is optimized for GPU acceleration
-- Memory-efficient options are available for large datasets
-- Progress tracking is implemented for long-running processes
-- Batch processing is used for feature extraction
+### Running Feature Extraction
+```bash
+chmod +x run_pipeline_03.sh
+./run_pipeline_03.sh
+```
+
+This will:
+- Process all image tiles in the specified directory
+- Extract features using the UNI2-h model
+- Save embeddings to a CSV file
+- Generate a timestamped log file
+
+### Running UMAP and Clustering
+```bash
+python 04_05_umap_3d_kmeans30.py --input_csv output_embeddings.csv --output_dir results/
+```
+
+This will:
+- Load feature embeddings from the CSV file
+- Perform UMAP dimensionality reduction to 3D
+- Apply K-means clustering with 30 clusters
+- Generate interactive 3D visualization
+- Save cluster assignments and plots
+
+## Output
+
+### Cell Segmentation and Tile Extraction
+- Processed QuPath project with cell annotations
+- Extracted cell tiles in JPG format
+- Log files in `logs/` directory:
+  - `pipeline_YYYYMMDD_HHMMSS.log`: General execution log
+  - `pipeline_YYYYMMDD_HHMMSS_error.log`: Error log
+
+### Feature Extraction
+- CSV file containing feature embeddings
+- Log file with execution details
+- Each row in the CSV contains:
+  - Filename
+  - Feature dimensions (1536 dimensions per image)
+
+### UMAP and Clustering
+- Interactive 3D visualization (HTML format)
+- Cluster assignments CSV file
+- Static visualization plots (PNG format)
+- UMAP coordinates and cluster labels
+
+## Error Handling
+
+Both scripts include comprehensive error handling:
+- Automatic logging of all operations
+- Detailed error messages
+- Graceful failure handling
+- Log files for debugging
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-[Add your license here]
+Copyright (c) 2024 Maxence PELLOUX
+All rights reserved.
 
 ## Contact
 
-[Add your contact information here]
-
-## Acknowledgments
-
-- StarDist for cell segmentation
-- UNI2-h model for feature extraction
-- QuPath for image analysis platform 
+For questions or support, please contact mpelloux1@chu-grenoble.fr
