@@ -165,40 +165,26 @@ mkdir -p "$OUTPUT_DIR"
 log "Created output directory: $OUTPUT_DIR"
 
 # =============================================================================
-# Get Images from Project
+# Manually Define Images to Process
 # =============================================================================
-log "Getting list of images from the project..."
+log "Preparing to process images from the project"
 
-# Create a temporary file for the Groovy script
-GROOVY_SCRIPT=$(mktemp)
-cat > "$GROOVY_SCRIPT" << 'EOL'
-import qupath.lib.projects.ProjectIO
-import java.awt.image.BufferedImage
+# Instead of trying to parse QuPath output, ask for user input
+read -p "Enter the number of images to process: " TOTAL_IMAGES
+echo
 
-def projectPath = args[0].substring(12)
-def project = ProjectIO.loadProject(new File(projectPath), BufferedImage.class)
-def imageList = project.getImageList()
-println(imageList.size())
-imageList.each { entry -> println(entry.getImageName()) }
-EOL
-
-# Use QuPath headless to list images in the project and redirect verbose output to log file
-IMAGE_LIST=$("$QUPATH_PATH" headless script --args="projectPath=$PROJECT_PATH" -f "$GROOVY_SCRIPT" 2> "$QUPATH_LOG" | grep -v "INFO" | tail -n +1)
-
-# Clean up the temporary file
-rm -f "$GROOVY_SCRIPT"
-
-# Extract number of images and names
-TOTAL_IMAGES=$(echo "$IMAGE_LIST" | head -n 1)
-# Skip the first line which contains the count
-IMAGE_NAMES=($(echo "$IMAGE_LIST" | tail -n +2))
-
-if [ -z "$TOTAL_IMAGES" ] || [ "$TOTAL_IMAGES" -eq 0 ] || [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
-    error_log "No images found in the project. Please add images through the QuPath GUI first."
+if [[ ! "$TOTAL_IMAGES" =~ ^[0-9]+$ ]] || [ "$TOTAL_IMAGES" -eq 0 ]; then
+    error_log "Invalid number of images. Please enter a positive integer."
     exit 1
 fi
 
-log "Found $TOTAL_IMAGES images in the project"
+IMAGE_NAMES=()
+for ((i=1; i<=TOTAL_IMAGES; i++)); do
+    read -p "Enter the name of image $i: " image_name
+    IMAGE_NAMES+=("$image_name")
+done
+
+log "Will process $TOTAL_IMAGES images"
 echo
 
 # =============================================================================
