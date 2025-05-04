@@ -12,29 +12,23 @@ import qupath.lib.images.writers.ImageWriterTools
 import qupath.lib.regions.RegionRequest
 import qupath.lib.common.GeneralTools
 import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.images.ImageData
+import qupath.lib.projects.Project
+import qupath.lib.images.servers.ImageServerProvider
 
-/**
- * Configuration parameters for patch extraction
- */
-def CONFIG = [
-    PATCH_SIZE: 224,        // Size of the patches in pixels
-    MAGNIFICATION: 20.0,    // Target magnification for the patches
-    OUTPUT_DIR: "/Users/maxencepelloux/PYTHON_Projects/THESIS_PANK/output/tiles"  // Base output directory
-]
+// Configuration parameters for patch extraction
+// Declare at script level (not inside a class definition or method)
+PATCH_SIZE = 224        // Size of the patches in pixels
+MAGNIFICATION = 20.0    // Target magnification for the patches
+OUTPUT_DIR = "/Users/maxencepelloux/PYTHON_Projects/THESIS_PANK/output/tiles"  // Base output directory
 
 /**
  * Parse command line arguments
  * @return Map containing parsed arguments
  */
 def parseArguments() {
-    def args = getQuPath().getScriptArgs()
-    def outputDir = args.get('output')
-    
-    if (outputDir) {
-        CONFIG.OUTPUT_DIR = outputDir
-    }
-    
-    return [outputDir: CONFIG.OUTPUT_DIR]
+    // No arguments needed for this version since we're using the current image
+    return [:]
 }
 
 /**
@@ -43,7 +37,7 @@ def parseArguments() {
  * @return File object representing the output directory
  */
 def setupOutputDirectory(String imageName) {
-    def outputDir = new File(CONFIG.OUTPUT_DIR, imageName)
+    def outputDir = new File(OUTPUT_DIR, imageName)
     if (!outputDir.exists()) {
         outputDir.mkdirs()
     }
@@ -58,11 +52,11 @@ def setupOutputDirectory(String imageName) {
 def calculateDownsample(ImageServer server) {
     def baseMagnification = server.getMetadata().getMagnification()
     if (baseMagnification == null || Double.isNaN(baseMagnification) || baseMagnification <= 0) {
-        print "Base magnification unavailable or invalid. Using default = ${CONFIG.MAGNIFICATION}"
-        baseMagnification = CONFIG.MAGNIFICATION
+        print "Base magnification unavailable or invalid. Using default = ${MAGNIFICATION}"
+        baseMagnification = MAGNIFICATION
     }
 
-    def downsample = baseMagnification / CONFIG.MAGNIFICATION
+    def downsample = baseMagnification / MAGNIFICATION
     if (Double.isNaN(downsample) || downsample <= 0) {
         print "Invalid downsample (${downsample}). Using 1.0 instead."
         downsample = 1.0
@@ -74,11 +68,17 @@ def calculateDownsample(ImageServer server) {
  * Main execution function for patch extraction
  */
 def runPatchExtraction() {
-    // Parse command line arguments
-    def args = parseArguments()
+    // No need to parse arguments - we're using the current image
     
-    // Get current image server and name
-    def server = getCurrentServer()
+    // Get the current image data (already loaded by QuPath's --image parameter)
+    def imageData = getCurrentImageData()
+    if (imageData == null) {
+        print "Error: No image is currently loaded"
+        return
+    }
+    
+    // Get the image server and name
+    def server = imageData.getServer()
     def imageName = GeneralTools.stripExtension(server.getMetadata().getName())
     
     // Setup output directory
@@ -92,11 +92,11 @@ def runPatchExtraction() {
     def downsample = calculateDownsample(server)
     
     // Define patch size from configuration
-    def patchSize = (int)(CONFIG.PATCH_SIZE * downsample)
-    def halfPatchSize = (int)(CONFIG.PATCH_SIZE / 2 * downsample)
+    def patchSize = (int)(PATCH_SIZE * downsample)
+    def halfPatchSize = (int)(PATCH_SIZE / 2 * downsample)
     
     // Process annotations
-    def annotations = getAnnotationObjects()
+    def annotations = imageData.getHierarchy().getAnnotationObjects()
     def totalROIs = annotations.size()
     def processedROIs = 0
     

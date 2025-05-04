@@ -10,6 +10,17 @@
 # =============================================================================
 
 # =============================================================================
+# QuPath Configuration
+# =============================================================================
+QUPATH_PATH="/Applications/QuPath-0.5.1-arm64.app/Contents/MacOS/QuPath-0.5.1-arm64"
+
+# Validate QuPath installation
+if [ ! -f "$QUPATH_PATH" ]; then
+    echo "Error: QuPath not found at $QUPATH_PATH"
+    exit 1
+fi
+
+# =============================================================================
 # Help Function
 # =============================================================================
 show_help() {
@@ -18,13 +29,13 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH    Path to QuPath project file (.qpproj)"
     echo "  -m, --model PATH      Path to StarDist model file (.pb)"
-    echo "  -i, --images PATH     Directory containing .ndpi images"
     echo "  -h, --help           Show this help message"
     echo
     echo "Example:"
-    echo "  $0 -p /path/to/project.qpproj -m /path/to/model.pb -i /path/to/images"
+    echo "  $0 -p /path/to/project.qpproj -m /path/to/model.pb"
     echo
     echo "Note: All paths are required. The script will validate their existence."
+    echo "IMPORTANT: Images must be already added to the QuPath project through the GUI."
     exit 1
 }
 
@@ -36,6 +47,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_DIR="logs"
 LOG_FILE="${LOG_DIR}/pipeline_${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/pipeline_${TIMESTAMP}_error.log"
+QUPATH_LOG="${LOG_DIR}/qupath_${TIMESTAMP}.log"
 
 # Create logs directory if it doesn't exist
 mkdir -p "$LOG_DIR"
@@ -62,9 +74,13 @@ progress_bar() {
     local completed=$((width * current / total))
     local remaining=$((width - completed))
     
-    printf "\r\033[1;33mProgress: [%${completed}s%${remaining}s] %d%%\033[0m" \
-           "$(printf '#%.0s' $(seq 1 $completed))" \
-           "$(printf '-%.0s' $(seq 1 $remaining))" \
+    # Ensure values are within range to avoid printf errors
+    if [ "$completed" -lt 0 ]; then completed=0; fi
+    if [ "$remaining" -lt 0 ]; then remaining=0; fi
+    
+    printf "\r\033[1;33mProgress: [%s%s] %d%%\033[0m" \
+           "$(printf '%0.s#' $(seq 1 $completed))" \
+           "$(printf '%0.s-' $(seq 1 $remaining))" \
            "$percentage"
 }
 
@@ -78,7 +94,6 @@ exec 2> >(tee -a "$LOG_FILE" "$ERROR_LOG" >&2)
 # Initialize variables
 PROJECT_PATH=""
 MODEL_PATH=""
-IMAGES_DIR=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -89,10 +104,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             MODEL_PATH="$2"
-            shift 2
-            ;;
-        -i|--images)
-            IMAGES_DIR="$2"
             shift 2
             ;;
         -h|--help)
@@ -106,7 +117,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [ -z "$PROJECT_PATH" ] || [ -z "$MODEL_PATH" ] || [ -z "$IMAGES_DIR" ]; then
+if [ -z "$PROJECT_PATH" ] || [ -z "$MODEL_PATH" ]; then
     error_log "Missing required arguments"
     show_help
 fi
@@ -125,7 +136,6 @@ echo
 log "Starting pipeline execution"
 log "Project path: $PROJECT_PATH"
 log "Model path: $MODEL_PATH"
-log "Images directory: $IMAGES_DIR"
 echo
 
 # =============================================================================
@@ -144,64 +154,82 @@ if [ ! -f "$MODEL_PATH" ]; then
     exit 1
 fi
 
-if [ ! -d "$IMAGES_DIR" ]; then
-    error_log "Images directory not found: $IMAGES_DIR"
+log "Input validation completed successfully"
+echo
+
+# =============================================================================
+# Create Output Directory
+# =============================================================================
+OUTPUT_DIR="output/tiles"
+mkdir -p "$OUTPUT_DIR"
+log "Created output directory: $OUTPUT_DIR"
+
+# =============================================================================
+# Get Images from Project
+# =============================================================================
+log "Getting list of images from the project..."
+
+# Use QuPath headless to list images in the project and redirect verbose output to log file
+IMAGE_LIST=$(
+  "$QUPATH_PATH" headless script --args="projectPath=$PROJECT_PATH" -e "
+    import qupath.lib.projects.ProjectIO
+    import java.awt.image.BufferedImage
+
+    def project = ProjectIO.loadProject(new File(args[0].substring(12)), BufferedImage.class)
+    def imageList = project.getImageList()
+    println '${imageList.size()}'
+    imageList.each { entry -> println entry.getImageName() }
+  " 2> "$QUPATH_LOG" | grep -v "INFO" | tail -n +1  # Skip the INFO log lines
+)
+
+# Extract number of images and names
+TOTAL_IMAGES=$(echo "$IMAGE_LIST" | head -n 1)
+# Skip the first line which contains the count
+IMAGE_NAMES=($(echo "$IMAGE_LIST" | tail -n +2))
+
+if [ -z "$TOTAL_IMAGES" ] || [ "$TOTAL_IMAGES" -eq 0 ] || [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
+    error_log "No images found in the project. Please add images through the QuPath GUI first."
     exit 1
 fi
 
-log "Input validation completed successfully"
+log "Found $TOTAL_IMAGES images in the project: ${IMAGE_NAMES[*]}"
 echo
 
 # =============================================================================
 # Main Pipeline Execution
 # =============================================================================
-# Count total number of .ndpi files
-total_images=$(ls -1 "$IMAGES_DIR"/*.ndpi 2>/dev/null | wc -l)
+# Process each image in the project
 current_image=0
 
-if [ "$total_images" -eq 0 ]; then
-    error_log "No .ndpi files found in $IMAGES_DIR"
-    exit 1
-fi
-
-log "Found $total_images images to process"
-echo
-
-# Process each .ndpi file in the images directory
-for image in "$IMAGES_DIR"/*.ndpi; do
-    if [ -f "$image" ]; then
-        current_image=$((current_image + 1))
-        image_name=$(basename "$image")
-        
-        echo -e "\033[1;36mProcessing image $current_image of $total_images: $image_name\033[0m"
-        
-        # Step 1: Cell Segmentation using StarDist
-        log "Starting cell segmentation for $image_name"
-        if qupath script --project="$PROJECT_PATH" \
-                        --image="$image" \
-                        --args="--model=$MODEL_PATH" \
-                        01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath.groovy; then
-            log "Cell segmentation completed successfully for $image_name"
-        else
-            error_log "Cell segmentation failed for $image_name"
-            continue
-        fi
-        
-        # Step 2: Cell Tile Extraction
-        log "Starting cell tile extraction for $image_name"
-        if qupath script --project="$PROJECT_PATH" \
-                        --image="$image" \
-                        02_he_wsubfolder_jpg_cell_tile_224x224_qupath.groovy; then
-            log "Cell tile extraction completed successfully for $image_name"
-        else
-            error_log "Cell tile extraction failed for $image_name"
-            continue
-        fi
-        
-        # Update progress bar
-        progress_bar $current_image $total_images
-        echo
+for image_name in "${IMAGE_NAMES[@]}"; do
+    current_image=$((current_image + 1))
+    
+    echo -e "\033[1;36mProcessing image $current_image of $TOTAL_IMAGES: $image_name\033[0m"
+    
+    # Step 1: Cell Segmentation using StarDist
+    log "Starting cell segmentation for $image_name"
+    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                    --image="$image_name" \
+                    --args="model=$MODEL_PATH" \
+                    01_he_stardist_cell_segmentation_shell_compatible.groovy \
+                    > "$QUPATH_LOG" 2>&1; then
+        error_log "Cell segmentation failed for $image_name"
+        continue
     fi
+    
+    # Step 2: Cell Tile Extraction
+    log "Starting cell tile extraction for $image_name"
+    if ! "$QUPATH_PATH" script --project="$PROJECT_PATH" \
+                    --image="$image_name" \
+                    02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
+                    > "$QUPATH_LOG" 2>&1; then
+        error_log "Cell tile extraction failed for $image_name"
+        continue
+    fi
+    
+    # Update progress bar
+    progress_bar $current_image $TOTAL_IMAGES
+    echo
 done
 
 # =============================================================================
@@ -212,5 +240,7 @@ echo -e "\033[1;32m===============================================\033[0m"
 echo -e "\033[1;32m           Pipeline Execution Complete         \033[0m"
 echo -e "\033[1;32m===============================================\033[0m"
 log "Pipeline execution completed"
+log "Successfully processed $current_image images"
 log "Check $LOG_FILE for detailed logs"
-log "Check $ERROR_LOG for error logs" 
+log "Check $ERROR_LOG for error logs"
+log "QuPath verbose output is in $QUPATH_LOG" 

@@ -8,28 +8,39 @@
 
 import qupath.lib.objects.classes.PathClass
 import qupath.ext.stardist.StarDist2D
+import qupath.lib.images.ImageData
+import qupath.lib.projects.Project
+import qupath.lib.images.servers.ImageServerProvider
 
-/**
- * Configuration parameters for StarDist2D cell segmentation
- */
-def CONFIG = [
-    PIXEL_SIZE: 0.23,  // microns per pixel
-    DETECTION_THRESHOLD: 0.25,
-    CELL_EXPANSION: 0.0,
-    MAX_IMAGE_DIMENSION: 4096,
-    NORMALIZATION_PERCENTILES: [0.2, 99.8]
-]
+// Configuration parameters for StarDist2D cell segmentation
+// Declare at script level (not inside a class definition or method)
+PIXEL_SIZE = 0.23  // microns per pixel
+DETECTION_THRESHOLD = 0.25
+CELL_EXPANSION = 0.0
+MAX_IMAGE_DIMENSION = 4096
+NORMALIZATION_PERCENTILES = [0.2, 99.8]
 
 /**
  * Parse command line arguments
  * @return Map containing parsed arguments
  */
 def parseArguments() {
-    def args = getQuPath().getScriptArgs()
-    def modelPath = args.get('model')
+    def args = args
+    if (!args) {
+        println "Error: No arguments provided"
+        return null
+    }
+    
+    def modelPath = null
+    
+    args.each { arg ->
+        if (arg.startsWith("model=")) {
+            modelPath = arg.substring(6)
+        }
+    }
     
     if (!modelPath) {
-        print "Error: Model path not provided. Please use --model=/path/to/model.pb"
+        println "Error: Model path not provided"
         return null
     }
     
@@ -57,16 +68,16 @@ def validateModelFile(String modelPath) {
  */
 def createStarDistModel(String modelPath) {
     return StarDist2D.builder(modelPath)
-        .threshold(CONFIG.DETECTION_THRESHOLD)
-        .pixelSize(CONFIG.PIXEL_SIZE)
-        .cellExpansion(CONFIG.CELL_EXPANSION)
+        .threshold(DETECTION_THRESHOLD)
+        .pixelSize(PIXEL_SIZE)
+        .cellExpansion(CELL_EXPANSION)
         .measureShape()
         .measureIntensity()
         .classify(PathClass.fromString("Nucleus"))
         .preprocess(
             StarDist2D.imageNormalizationBuilder()
-                .maxDimension(CONFIG.MAX_IMAGE_DIMENSION)
-                .percentiles(CONFIG.NORMALIZATION_PERCENTILES[0], CONFIG.NORMALIZATION_PERCENTILES[1])
+                .maxDimension(MAX_IMAGE_DIMENSION)
+                .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
                 .build()
         )
         .build()
@@ -87,10 +98,10 @@ def runCellDetection() {
         return
     }
 
-    // Get current image data
+    // Get the current image data (already loaded by QuPath's --image parameter)
     def imageData = getCurrentImageData()
     if (imageData == null) {
-        print "Error: No image is currently open."
+        print "Error: No image is currently loaded"
         return
     }
 

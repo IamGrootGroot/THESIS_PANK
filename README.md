@@ -6,8 +6,8 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 
 ```
 .
-├── 01_he_stardist_cell_segmentation_0.23_um_per_pixel_qupath.groovy
-├── 02_he_wsubfolder_jpg_cell_tile_224x224_qupath.groovy
+├── 01_he_stardist_cell_segmentation_shell_compatible.groovy
+├── 02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy
 ├── 03_uni2_feature_extraction_NEW2.py
 ├── 04_05_umap_3d_kmeans30.py
 ├── run_pipeline_01_02.sh
@@ -40,10 +40,10 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ## Prerequisites
 
 ### System Requirements
-- Linux/Unix-based system
+- Linux/Unix-based system or macOS
 - NVIDIA GPU with CUDA support (recommended)
 - Python 3.8+
-- QuPath 0.4.0+
+- QuPath 0.5.0+
 
 ### Python Dependencies
 ```bash
@@ -60,7 +60,7 @@ plotly
 
 ### External Dependencies
 - QuPath installation
-- StarDist model file (`he_heavy_augment.pb`)
+- StarDist model file (e.g., `he_heavy_augment.pb`)
 - HuggingFace account and API token
 
 ## Setup
@@ -76,27 +76,20 @@ cd <repository-name>
 pip install -r requirements.txt
 ```
 
-3. Configure the pipeline scripts:
-   - Update paths in `run_pipeline_01_02.sh`:
-     - `PROJECT_PATH`: Path to your QuPath project
-     - `MODEL_PATH`: Path to StarDist model
-     - `IMAGES_DIR`: Directory containing .ndpi images
-
-   - Update configuration in `run_pipeline_03.sh`:
-     - `HF_TOKEN`: Your HuggingFace API token
-     - `IMAGE_DIR`: Directory containing extracted tiles
-     - `OUTPUT_CSV`: Desired output file name
+3. Configure the pipeline:
+   - Create a QuPath project and add your images through the QuPath GUI
+   - Ensure you have a StarDist model file
 
 ## Usage
 
 ### Running Cell Segmentation and Tile Extraction
 ```bash
 chmod +x run_pipeline_01_02.sh
-./run_pipeline_01_02.sh
+./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb
 ```
 
 This will:
-- Process all .ndpi files in the specified directory
+- Process all images already added to the QuPath project
 - Perform cell segmentation using StarDist
 - Extract 224x224 pixel tiles around detected cells
 - Save logs in the `logs/` directory
@@ -125,6 +118,19 @@ This will:
 - Generate interactive 3D visualization
 - Save cluster assignments and plots
 
+## Important Workflow Changes
+
+### QuPath Image Loading
+- Images must be added to the QuPath project **before** running the pipeline
+- This must be done through the QuPath GUI due to limitations with processing NDPI files in headless mode
+- The pipeline will automatically detect and process all images in the project
+
+### Script Improvements
+- Improved error handling and logging
+- Separate log files for general execution, errors, and QuPath output
+- Progress tracking with visual indicators
+- Better command-line argument parsing
+
 ## Output
 
 ### Cell Segmentation and Tile Extraction
@@ -133,6 +139,7 @@ This will:
 - Log files in `logs/` directory:
   - `pipeline_YYYYMMDD_HHMMSS.log`: General execution log
   - `pipeline_YYYYMMDD_HHMMSS_error.log`: Error log
+  - `qupath_YYYYMMDD_HHMMSS.log`: QuPath verbose output
 
 ### Feature Extraction
 - CSV file containing feature embeddings
