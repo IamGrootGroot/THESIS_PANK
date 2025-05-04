@@ -67,14 +67,14 @@ def calculateDownsample(ImageServer server) {
 }
 
 /**
- * Gets all detections in the hierarchy, regardless of parent
- * @param hierarchy The object hierarchy to search
+ * Gets all detections in the hierarchy
+ * @param imageData The image data containing the hierarchy
  * @return List of detection objects
  */
 def getAllDetections(imageData) {
     def hierarchy = imageData.getHierarchy()
-    // Get all detections directly rather than looking for children of annotations
-    return hierarchy.getObjects().findAll { it.isDetection() }
+    // Use the correct method to get all detections from the hierarchy
+    return hierarchy.getDetectionObjects()
 }
 
 /**
