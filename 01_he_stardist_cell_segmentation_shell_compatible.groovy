@@ -87,22 +87,6 @@ def createStarDistModel(String modelPath) {
 }
 
 /**
- * Creates a full image annotation
- * @param imageData The current image data
- * @return The created annotation object
- */
-def createFullImageAnnotation(imageData) {
-    def server = imageData.getServer()
-    def width = server.getWidth()
-    def height = server.getHeight()
-    def roi = ROIs.createRectangleROI(0, 0, width, height, ImagePlane.getDefaultPlane())
-    def annotation = PathObjects.createAnnotationObject(roi, PathClass.fromString("Tissue"))
-    annotation.setName("Whole Image")
-    imageData.getHierarchy().addObject(annotation)
-    return annotation
-}
-
-/**
  * Explicitly save the current image data to the project
  * @param imageData The current image data to save
  */
@@ -142,6 +126,7 @@ def runCellDetection() {
 
     // Get the current image data (already loaded by QuPath's --image parameter)
     def imageData = getCurrentImageData()
+    createFullImageAnnotation(true)
     if (imageData == null) {
         print "Error: No image is currently loaded"
         return
@@ -150,13 +135,6 @@ def runCellDetection() {
     // Setup hierarchy and annotations
     def hierarchy = imageData.getHierarchy()
     def annotations = hierarchy.getAnnotationObjects()
-
-    // Create full image annotation if none exists
-    if (annotations.isEmpty()) {
-        print "No annotations found. Creating full image annotation..."
-        def wholeImageAnnotation = createFullImageAnnotation(imageData)
-        annotations = [wholeImageAnnotation]
-    }
 
     print "Running StarDist detection on the current image..."
 
