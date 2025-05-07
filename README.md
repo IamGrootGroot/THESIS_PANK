@@ -130,6 +130,20 @@ This will:
 - Separate log files for general execution, errors, and QuPath output
 - Progress tracking with visual indicators
 - Better command-line argument parsing
+- Enhanced image loading and processing capabilities
+- Improved cell segmentation accuracy with StarDist
+- Optimized tile extraction process
+- Better memory management for large datasets
+
+### Recent Updates
+- Enhanced compatibility with different image formats
+- Improved error handling for image loading failures
+- Better progress reporting during long operations
+- Optimized memory usage during tile extraction
+- Enhanced logging system with more detailed information
+- Improved handling of QuPath project structure
+- Better integration with StarDist model
+- Enhanced support for batch processing
 
 ## Output
 
