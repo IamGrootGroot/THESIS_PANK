@@ -15,7 +15,7 @@ import qupath.lib.gui.images.stores.DefaultImageRegionStore
 import qupath.lib.gui.images.stores.ImageRegionStoreFactory
 import qupath.fx.dialogs.FileChoosers
 import qupath.lib.images.servers.ImageServers
-import qupath.extension.openslide.OpenSlideServerBuilder
+import qupath.lib.images.servers.ImageServerBuilder
 
 // Define whether to pyramidalize images when adding them to the project
 def pyramidalizeImages = true
@@ -104,13 +104,26 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     // Is it a file we know how to read?
     def support
     if (file.getName().toLowerCase().endsWith('.ndpi')) {
-        // For NDPI files, use OpenSlide server builder
-        def builder = new OpenSlideServerBuilder()
-        support = new qupath.lib.images.servers.ImageServerProvider.UriImageSupport(BufferedImage.class, [builder])
-    } else {
-        // For other files, use the default preferred server
+        // For NDPI files, try to find a server builder that can handle it
+        def builders = ImageServerProvider.getInstalledImageServerBuilders(BufferedImage.class)
+        def ndpiBuilder = builders.find { builder ->
+            try {
+                def server = builder.build(imagePath)
+                return server != null
+            } catch (Exception e) {
+                return false
+            }
+        }
+        if (ndpiBuilder != null) {
+            support = new qupath.lib.images.servers.ImageServerProvider.UriImageSupport(BufferedImage.class, [ndpiBuilder])
+        }
+    }
+    
+    // If no specific support found, try the default
+    if (support == null) {
         support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
     }
+    
     if (support == null)
         return
 
