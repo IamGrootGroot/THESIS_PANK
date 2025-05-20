@@ -110,20 +110,18 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
         builders = builders.findAll { builder ->
             !builder.getClass().getName().contains('ImageJServerBuilder')
         }
-        def ndpiBuilder = builders.find { builder ->
+        
+        // Try each non-ImageJ builder until we find one that works
+        for (builder in builders) {
             try {
                 def server = builder.build(imagePath)
-                return server != null
+                if (server != null) {
+                    // Create a new support with just this builder
+                    support = new qupath.lib.images.servers.ImageServerProvider.UriImageSupport(BufferedImage.class, [builder])
+                    break
+                }
             } catch (Exception e) {
-                return false
-            }
-        }
-        if (ndpiBuilder != null) {
-            // Create a new support with just our working builder
-            support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
-            if (support != null) {
-                support.builders.clear()
-                support.builders.add(ndpiBuilder)
+                continue
             }
         }
     }
