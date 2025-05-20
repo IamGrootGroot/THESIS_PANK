@@ -6,6 +6,7 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 
 ```
 .
+├── 00_create_project.groovy
 ├── 01_he_stardist_cell_segmentation_shell_compatible.groovy
 ├── 02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy
 ├── 03_uni2_feature_extraction_NEW2.py
@@ -14,6 +15,34 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ├── run_pipeline_03.sh
 └── logs/
 ```
+
+## Project Creation
+
+The `00_create_project.groovy` script automates the creation of a QuPath project from a directory of images. It can be run either from the QuPath GUI or from the command line.
+
+### Features
+- Creates a new QuPath project in a specified directory
+- Automatically detects and adds supported image formats
+- Handles multi-scene images (e.g., VSI files)
+- Supports pyramidalization of images for better performance
+- Generates thumbnails for quick preview
+- Estimates image type (e.g., Brightfield H&E)
+
+### Usage
+
+#### From Command Line
+```bash
+qupath script 00_create_project.groovy --args /path/to/image/directory
+```
+
+#### From QuPath GUI
+1. Open QuPath
+2. Go to Script -> Run...
+3. Select `00_create_project.groovy`
+4. Choose your image directory when prompted
+
+### Configuration
+The script includes a `pyramidalizeImages` flag (default: `true`) that determines whether images should be pyramidalized when added to the project. Pyramidalization improves performance for large images but requires more disk space.
 
 ## Pipeline Components
 
