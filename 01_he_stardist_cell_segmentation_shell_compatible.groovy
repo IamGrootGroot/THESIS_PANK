@@ -16,12 +16,12 @@ import qupath.lib.objects.PathObjects
 import qupath.lib.regions.ImagePlane
 
 // Configuration parameters for StarDist2D cell segmentation
-// Declare at script level (not inside a class definition or method)
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
 MAX_IMAGE_DIMENSION = 4096
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
+TILE_SIZE = 4096
 
 /**
  * Parse command line arguments
@@ -74,6 +74,7 @@ def createStarDistModel(String modelPath) {
         .threshold(DETECTION_THRESHOLD)
         .pixelSize(PIXEL_SIZE)
         .cellExpansion(CELL_EXPANSION)
+        .tileSize(TILE_SIZE)
         .measureShape()
         .measureIntensity()
         .classify(PathClass.fromString("Nucleus"))
