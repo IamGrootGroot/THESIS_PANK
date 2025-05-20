@@ -16,6 +16,7 @@ import qupath.lib.gui.images.stores.ImageRegionStoreFactory
 import qupath.fx.dialogs.FileChoosers
 import qupath.lib.images.servers.ImageServers
 import qupath.lib.images.servers.ImageServerBuilder
+import qupath.lib.images.servers.openslide.OpenSlideServerBuilder
 
 // Define whether to pyramidalize images when adding them to the project
 def pyramidalizeImages = true
@@ -104,30 +105,20 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     // Is it a file we know how to read?
     def support
     if (file.getName().toLowerCase().endsWith('.ndpi')) {
-        // For NDPI files, try to find a server builder that can handle it
-        def builders = ImageServerProvider.getInstalledImageServerBuilders(BufferedImage.class)
-        // Filter out ImageJ server builder for NDPI files
-        builders = builders.findAll { builder ->
-            !builder.getClass().getName().contains('ImageJServerBuilder')
-        }
-        
-        // Try each non-ImageJ builder until we find one that works
-        for (builder in builders) {
-            try {
-                def server = builder.build(imagePath)
-                if (server != null) {
-                    // Use this builder directly
-                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
-                    if (support != null) {
-                        // Replace all builders with just our working one
-                        support.builders.clear()
-                        support.builders.add(builder)
-                        break
-                    }
+        // For NDPI files, try to use OpenSlide server builder directly
+        try {
+            def builder = new OpenSlideServerBuilder()
+            def server = builder.build(imagePath)
+            if (server != null) {
+                // Create a new support with just the OpenSlide builder
+                support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+                if (support != null) {
+                    support.builders.clear()
+                    support.builders.add(builder)
                 }
-            } catch (Exception e) {
-                continue
             }
+        } catch (Exception e) {
+            println "Failed to use OpenSlide server builder: " + e.getMessage()
         }
     }
     
