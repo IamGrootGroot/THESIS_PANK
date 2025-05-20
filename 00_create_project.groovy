@@ -106,6 +106,10 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     if (file.getName().toLowerCase().endsWith('.ndpi')) {
         // For NDPI files, try to find a server builder that can handle it
         def builders = ImageServerProvider.getInstalledImageServerBuilders(BufferedImage.class)
+        // Filter out ImageJ server builder for NDPI files
+        builders = builders.findAll { builder ->
+            !builder.getClass().getName().contains('ImageJServerBuilder')
+        }
         def ndpiBuilder = builders.find { builder ->
             try {
                 def server = builder.build(imagePath)
@@ -115,10 +119,9 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
             }
         }
         if (ndpiBuilder != null) {
-            // Use the builder directly instead of creating UriImageSupport
+            // Create a new support with just our working builder
             support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
             if (support != null) {
-                // Replace the builders list with just our working builder
                 support.builders.clear()
                 support.builders.add(ndpiBuilder)
             }
