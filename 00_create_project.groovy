@@ -115,7 +115,13 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
             }
         }
         if (ndpiBuilder != null) {
-            support = new qupath.lib.images.servers.ImageServerProvider.UriImageSupport(BufferedImage.class, [ndpiBuilder])
+            // Use the builder directly instead of creating UriImageSupport
+            support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+            if (support != null) {
+                // Replace the builders list with just our working builder
+                support.builders.clear()
+                support.builders.add(ndpiBuilder)
+            }
         }
     }
     
