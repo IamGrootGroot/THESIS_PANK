@@ -116,9 +116,14 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
             try {
                 def server = builder.build(imagePath)
                 if (server != null) {
-                    // Create a new support with just this builder
-                    support = new qupath.lib.images.servers.ImageServerProvider.UriImageSupport(BufferedImage.class, [builder])
-                    break
+                    // Use this builder directly
+                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+                    if (support != null) {
+                        // Replace all builders with just our working one
+                        support.builders.clear()
+                        support.builders.add(builder)
+                        break
+                    }
                 }
             } catch (Exception e) {
                 continue
