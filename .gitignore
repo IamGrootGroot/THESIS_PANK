@@ -51,3 +51,6 @@ Thumbs.db
 *.hdf5
 *.model
 *.weights 
+
+# Output directory
+output/ 

@@ -133,11 +133,9 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
                 
                 def support
                 if (provider.builder != null) {
-                    def encodedPath = imagePath.replace(" ", "%20")
-                    support = provider.builder.buildImageServers(new URI("file:" + encodedPath))
+                    support = provider.builder.buildImageServers(new URI("file:" + imagePath))
                 } else {
-                    def encodedPath = imagePath.replace(" ", "%20")
-                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, encodedPath)
+                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
                 }
                 
                 if (support == null || support.builders.isEmpty()) {
@@ -240,8 +238,7 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
         }
     } else {
         // For non-NDPI files, use the default approach
-        def encodedPath = imagePath.replace(" ", "%20")
-        def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, encodedPath)
+        def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
         if (support == null)
             return
 
