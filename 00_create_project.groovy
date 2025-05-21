@@ -133,10 +133,15 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
                 
                 def server
                 if (provider.builder != null) {
-                    // Try to detect and build the server directly
-                    server = provider.builder.detectServer(new URI("file:" + imagePath))
+                    // Try to build the server directly
+                    try {
+                        server = provider.builder.buildServer(new URI("file:" + imagePath))
+                    } catch (Exception e) {
+                        println "Could not build server with ${provider.name} for " + file.getName() + ": " + e.getMessage()
+                        return false
+                    }
                     if (server == null) {
-                        println "No server detected with ${provider.name} for " + file.getName()
+                        println "No server built with ${provider.name} for " + file.getName()
                         return false
                     }
                 } else {
