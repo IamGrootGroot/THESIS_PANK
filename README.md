@@ -56,6 +56,16 @@ The script includes a `pyramidalizeImages` flag (default: `true`) that determine
   `<trident_base_output_dir>/<slide_name_without_extension>/segmentations/<slide_name_without_extension>.geojson`.
 - These GeoJSON files are then imported into the QuPath project using the `00a_import_trident_geojson.groovy` script.
 
+#### TRIDENT Prerequisites:
+- **Python Environment:** Python 3.8+ is recommended.
+- **TRIDENT Toolkit Installation:** 
+    1. Clone the TRIDENT repository: `git clone https://github.com/mahmoodlab/TRIDENT.git`
+    2. Navigate into the cloned directory: `cd TRIDENT`
+    3. Install TRIDENT and its dependencies (preferably in a virtual environment): `pip install -e .`
+    This will install PyTorch and other necessary libraries. The `run_single_slide.py` script will be in the root of this cloned TRIDENT directory.
+- **CUDA-Enabled GPU:** While TRIDENT (via PyTorch) might technically run on a CPU, a CUDA-enabled NVIDIA GPU is **highly recommended** for acceptable performance. Processing whole-slide images for segmentation is computationally intensive and will be extremely slow on a CPU.
+- **Model Dependencies:** Specific TRIDENT models might have additional dependencies. TRIDENT typically notifies you if these are missing.
+
 ### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
 - Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions** (annotations with class "Tissue (TRIDENT)").
 - Extracts 224x224 pixel tiles around detected cells.
@@ -101,7 +111,7 @@ plotly
 - QuPath installation
 - StarDist model file (e.g., `he_heavy_augment.pb`)
 - HuggingFace account and API token
-- TRIDENT toolkit installation and its `run_single_slide.py` script accessible.
+- TRIDENT toolkit installation (see TRIDENT Prerequisites above) and its `run_single_slide.py` script accessible.
 
 ## Setup
 
