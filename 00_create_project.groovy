@@ -117,124 +117,77 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     if (file.getName().toLowerCase().endsWith(".ndpi")) {
         println "Processing NDPI file: " + file.getName()
         
-        // Try different providers in order of preference
-        def providers = [
-            [name: "OpenSlide", builder: new OpenslideServerBuilder()],
-            [name: "Bio-Formats", builder: new BioFormatsServerBuilder()],
-            [name: "Default", builder: null]  // Will use default provider
-        ]
-        
-        boolean success = false
-        Exception lastError = null
-        
-        providers.find { provider ->
-            try {
-                println "Attempting to use ${provider.name} provider..."
-                
-                def support
-                if (provider.builder != null) {
-                    support = provider.builder.buildImageServers(new URI("file:" + imagePath))
-                } else {
-                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
-                }
-                
-                if (support == null || support.builders.isEmpty()) {
-                    println "No support available with ${provider.name} for " + file.getName()
-                    return false
-                }
-                
-                println "Using provider: " + support.getClass().getName()
-                
-                // Process each scene
-                return support.builders.find { builder ->
-                    def sceneName = file.getName()
-                    
-                    if (support.builders.size() > 1)
-                        sceneName += " - Scene #" + (support.builders.indexOf(builder) + 1)
-                    
-                    // Create a pyramidalized server if requested
-                    if (pyramidalizeImages) {
-                        try {
-                            def server = builder.build()
-                            println "Successfully built server with ${provider.name}"
-                            println "Server metadata: " + server.getMetadata()
-                            
-                            def pyramidBuilder = ImageServers.pyramidalize(server).getBuilder()
-                            entry = project.addImage(pyramidBuilder)
-                            success = true
-                        } catch (Exception e) {
-                            println "Error creating pyramidalized server with ${provider.name} for " + sceneName + ": " + e.getMessage()
-                            lastError = e
-                            // Try without pyramidalization as a fallback
-                            try {
-                                entry = project.addImage(builder)
-                                success = true
-                            } catch (Exception e2) {
-                                println "Error adding non-pyramidalized image: " + e2.getMessage()
-                                lastError = e2
-                                return false
-                            }
-                        }
-                    } else {
-                        try {
-                            entry = project.addImage(builder)
-                            success = true
-                        } catch (Exception e) {
-                            println "Error adding image with ${provider.name}: " + e.getMessage()
-                            lastError = e
-                            return false
-                        }
-                    }
-                    
-                    try {
-                        imageData = entry.readImageData()
-                        // Print image server information
-                        def server = imageData.getServer()
-                        println "Image server for " + sceneName + ":"
-                        println "  - Server class: " + server.getClass().getName()
-                        println "  - Server metadata: " + server.getMetadata()
-                        println "  - Server path: " + server.getPath()
-                        println "  - Server URI: " + server.getURIs()
-                        println "  - Server builder: " + server.getBuilder()
-                        
-                        println "Adding: " + sceneName
-                    
-                        // Set a particular image type automatically
-                        def imageType = GuiTools.estimateImageType(server, imageRegionStore.getThumbnail(server, 0, 0, true));
-                        imageData.setImageType(imageType)
-                        println "Image type estimated to be " + imageType
-
-                        // Adding image data to the project entry
-                        entry.saveImageData(imageData)
-                    
-                        // Write a thumbnail if we can
-                        var img = ProjectCommands.getThumbnailRGB(server);
-                        entry.setThumbnail(img)
-                        
-                        // Add an entry name (the filename)
-                        entry.setImageName(sceneName)
-                        
-                        success = true
-                        return true
-                    } catch (Exception ex) {
-                        println sceneName +" -- Error reading image data " + ex
-                        project.removeImage(entry, true)
-                        lastError = ex
-                        return false
-                    }
-                }
-            } catch (Exception e) {
-                println "Error with ${provider.name} provider for " + file.getName() + ": " + e.getMessage()
-                lastError = e
-                return false
+        try {
+            // Force Bio-Formats usage for NDPI files
+            def builder = new BioFormatsServerBuilder()
+            
+            // Create URI for the file
+            def uri = new URI("file:" + imagePath)
+            
+            // Check if Bio-Formats can handle this file
+            if (!builder.checkImageSupport(uri)) {
+                println "Bio-Formats cannot handle this file: " + file.getName()
+                return
             }
-            return success
-        }
-        
-        if (!success && lastError != null) {
-            println "Failed to process file " + file.getName() + " with all providers. Last error: " + lastError.getMessage()
-            println "Stack trace:"
-            lastError.printStackTrace()
+            
+            println "Using Bio-Formats provider for NDPI file"
+            
+            // Build the server directly
+            def server = builder.build(uri)
+            
+            // Create entry with pyramidalization if requested
+            def entry
+            if (pyramidalizeImages) {
+                try {
+                    def pyramidBuilder = ImageServers.pyramidalize(server).getBuilder()
+                    entry = project.addImage(pyramidBuilder)
+                } catch (Exception e) {
+                    println "Error creating pyramidalized server: " + e.getMessage()
+                    // Try without pyramidalization as fallback
+                    entry = project.addImage(builder)
+                }
+            } else {
+                entry = project.addImage(builder)
+            }
+            
+            try {
+                def imageData = entry.readImageData()
+                def sceneName = file.getName()
+                
+                // Print image server information
+                println "Image server for " + sceneName + ":"
+                println "  - Server class: " + server.getClass().getName()
+                println "  - Server metadata: " + server.getMetadata()
+                println "  - Server path: " + server.getPath()
+                println "  - Server URI: " + server.getURIs()
+                println "  - Server builder: " + server.getBuilder()
+                
+                println "Adding: " + sceneName
+                
+                // Set image type
+                def imageType = GuiTools.estimateImageType(server, imageRegionStore.getThumbnail(server, 0, 0, true))
+                imageData.setImageType(imageType)
+                println "Image type estimated to be " + imageType
+                
+                // Save image data
+                entry.saveImageData(imageData)
+                
+                // Create thumbnail
+                var img = ProjectCommands.getThumbnailRGB(server)
+                entry.setThumbnail(img)
+                
+                // Set image name
+                entry.setImageName(sceneName)
+                
+            } catch (Exception ex) {
+                println sceneName + " -- Error reading image data: " + ex.getMessage()
+                project.removeImage(entry, true)
+                ex.printStackTrace()
+            }
+            
+        } catch (Exception e) {
+            println "Error processing NDPI file " + file.getName() + ": " + e.getMessage()
+            e.printStackTrace()
         }
     } else {
         // For non-NDPI files, use the default approach
