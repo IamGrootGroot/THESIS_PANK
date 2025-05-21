@@ -5,6 +5,7 @@
 // Based on code by @melvingelbard -- Discussion over at:
 // https://forum.image.sc/t/creating-project-from-command-line/45608/11
 // Script should work with QuPath v0.5.0 or newer
+// Modified to force Bio-Formats for NDPI files
 
 import groovy.io.FileType
 import java.awt.image.BufferedImage
@@ -15,6 +16,7 @@ import qupath.lib.gui.images.stores.DefaultImageRegionStore
 import qupath.lib.gui.images.stores.ImageRegionStoreFactory
 import qupath.fx.dialogs.FileChoosers
 import qupath.lib.images.servers.ImageServers
+import qupath.lib.images.servers.bioformats.BioFormatsServerBuilder
 
 // Define whether to pyramidalize images when adding them to the project
 def pyramidalizeImages = true
@@ -68,6 +70,16 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     }
 }
 
+// Get the Bio-Formats server builder explicitly
+def bioformatsBuilder = ImageServerProvider.getInstalledImageServerBuilders(BufferedImage.class).find {
+    it instanceof BioFormatsServerBuilder
+}
+
+if (bioformatsBuilder == null) {
+    println "ERROR: Bio-Formats server builder not found! Make sure the Bio-Formats extension is installed."
+    return
+}
+
 // Add files to the project
 selectedDir.eachFileRecurse (FileType.FILES) { file ->
     def imagePath = file.getCanonicalPath()
@@ -100,65 +112,138 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     if (file.getName().endsWith("_") || file.getName().startsWith("."))
         return
 
-    // Is it a file we know how to read?
-    def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
-    if (support == null)
-        return
-
-    // iterate through the scenes contained in the image file
-    support.builders.eachWithIndex { builder, i -> 
-        sceneName = file.getName()
+    // Process NDPI files
+    if (file.getName().toLowerCase().endsWith(".ndpi")) {
+        println "Processing NDPI file: " + file.getName()
         
-        if (sceneName.endsWith('.vsi')) {
-            //This is specific to .vsi files, we do not add a scene name to a vsi file
-            if (support.builders.size() >= 3 && i < 2) {
-                return;
-            }
-        } else {
-            if (support.builders.size() > 1)
-                sceneName += " - Scene #" + (i+1)
-        }
-        
-        // Add a new entry for the current builder and remove it if we weren't able to read the image.
-        // I don't like it but I wasn't able to use PathIO.readImageData().
-        if (pyramidalizeImages) {
-            entry = project.addImage(ImageServers.pyramidalize(builder.build()).getBuilder())
-        } else {
-            entry = project.addImage(builder)
-        }
-    
         try {
-            imageData = entry.readImageData()
-            // Print image server information
-            def server = imageData.getServer()
-            println "Image server for " + sceneName + ":"
-            println "  - Server class: " + server.getClass().getName()
-            println "  - Server metadata: " + server.getMetadata()
-            println "  - Server path: " + server.getPath()
-            println "  - Server URI: " + server.getURIs()
-            println "  - Server builder: " + server.getBuilder()
-        } catch (Exception ex) {
-            println sceneName +" -- Error reading image data " + ex
-            project.removeImage(entry, true)
-            return
-        }
-        
-        println "Adding: " + sceneName
-    
-        // Set a particular image type automatically (based on /qupath/lib/gui/QuPathGUI.java#L2847)
-        def imageType = GuiTools.estimateImageType(imageData.getServer(), imageRegionStore.getThumbnail(imageData.getServer(), 0, 0, true));
-        imageData.setImageType(imageType)
-        println "Image type estimated to be " + imageType
+            // Let QuPath choose the best provider
+            def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+            
+            if (support == null || support.builders.isEmpty()) {
+                println "No image support available for " + file.getName()
+                return
+            }
+            
+            println "Using provider: " + support.getClass().getName()
+            
+            // Process each scene
+            support.builders.eachWithIndex { builder, i -> 
+                sceneName = file.getName()
+                
+                if (support.builders.size() > 1)
+                    sceneName += " - Scene #" + (i+1)
+                
+                // Create a pyramidalized server if requested
+                if (pyramidalizeImages) {
+                    try {
+                        def server = builder.build()
+                        def pyramidBuilder = ImageServers.pyramidalize(server).getBuilder()
+                        entry = project.addImage(pyramidBuilder)
+                    } catch (Exception e) {
+                        println "Error creating pyramidalized server for " + sceneName + ": " + e.getMessage()
+                        // Try without pyramidalization as a fallback
+                        entry = project.addImage(builder)
+                    }
+                } else {
+                    entry = project.addImage(builder)
+                }
+                
+                try {
+                    imageData = entry.readImageData()
+                    // Print image server information
+                    def server = imageData.getServer()
+                    println "Image server for " + sceneName + ":"
+                    println "  - Server class: " + server.getClass().getName()
+                    println "  - Server metadata: " + server.getMetadata()
+                    println "  - Server path: " + server.getPath()
+                    println "  - Server URI: " + server.getURIs()
+                    println "  - Server builder: " + server.getBuilder()
+                    
+                    println "Adding: " + sceneName
+                
+                    // Set a particular image type automatically
+                    def imageType = GuiTools.estimateImageType(server, imageRegionStore.getThumbnail(server, 0, 0, true));
+                    imageData.setImageType(imageType)
+                    println "Image type estimated to be " + imageType
 
-        // Adding image data to the project entry
-        entry.saveImageData(imageData)
-    
-        // Write a thumbnail if we can
-        var img = ProjectCommands.getThumbnailRGB(imageData.getServer());
-        entry.setThumbnail(img)
+                    // Adding image data to the project entry
+                    entry.saveImageData(imageData)
+                
+                    // Write a thumbnail if we can
+                    var img = ProjectCommands.getThumbnailRGB(server);
+                    entry.setThumbnail(img)
+                    
+                    // Add an entry name (the filename)
+                    entry.setImageName(sceneName)
+                } catch (Exception ex) {
+                    println sceneName +" -- Error reading image data " + ex
+                    project.removeImage(entry, true)
+                }
+            }
+        } catch (Exception e) {
+            println "Error processing file " + file.getName() + ": " + e.getMessage()
+        }
+    } else {
+        // For non-NDPI files, use the default approach
+        def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+        if (support == null)
+            return
+
+        // iterate through the scenes contained in the image file
+        support.builders.eachWithIndex { builder, i -> 
+            sceneName = file.getName()
+            
+            if (sceneName.endsWith('.vsi')) {
+                //This is specific to .vsi files, we do not add a scene name to a vsi file
+                if (support.builders.size() >= 3 && i < 2) {
+                    return;
+                }
+            } else {
+                if (support.builders.size() > 1)
+                    sceneName += " - Scene #" + (i+1)
+            }
+            
+            // Add a new entry for the current builder and remove it if we weren't able to read the image.
+            if (pyramidalizeImages) {
+                entry = project.addImage(ImageServers.pyramidalize(builder.build()).getBuilder())
+            } else {
+                entry = project.addImage(builder)
+            }
         
-        // Add an entry name (the filename)
-        entry.setImageName(sceneName)
+            try {
+                imageData = entry.readImageData()
+                // Print image server information
+                def server = imageData.getServer()
+                println "Image server for " + sceneName + ":"
+                println "  - Server class: " + server.getClass().getName()
+                println "  - Server metadata: " + server.getMetadata()
+                println "  - Server path: " + server.getPath()
+                println "  - Server URI: " + server.getURIs()
+                println "  - Server builder: " + server.getBuilder()
+            } catch (Exception ex) {
+                println sceneName +" -- Error reading image data " + ex
+                project.removeImage(entry, true)
+                return
+            }
+            
+            println "Adding: " + sceneName
+        
+            // Set a particular image type automatically (based on /qupath/lib/gui/QuPathGUI.java#L2847)
+            def imageType = GuiTools.estimateImageType(imageData.getServer(), imageRegionStore.getThumbnail(imageData.getServer(), 0, 0, true));
+            imageData.setImageType(imageType)
+            println "Image type estimated to be " + imageType
+
+            // Adding image data to the project entry
+            entry.saveImageData(imageData)
+        
+            // Write a thumbnail if we can
+            var img = ProjectCommands.getThumbnailRGB(imageData.getServer());
+            entry.setThumbnail(img)
+            
+            // Add an entry name (the filename)
+            entry.setImageName(sceneName)
+        }
     }
 }
 
