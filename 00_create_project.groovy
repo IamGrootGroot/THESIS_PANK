@@ -129,6 +129,14 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
     
         try {
             imageData = entry.readImageData()
+            // Print image server information
+            def server = imageData.getServer()
+            println "Image server for " + sceneName + ":"
+            println "  - Server class: " + server.getClass().getName()
+            println "  - Server metadata: " + server.getMetadata()
+            println "  - Server path: " + server.getPath()
+            println "  - Server URI: " + server.getURIs()
+            println "  - Server builder: " + server.getBuilder()
         } catch (Exception ex) {
             println sceneName +" -- Error reading image data " + ex
             project.removeImage(entry, true)
