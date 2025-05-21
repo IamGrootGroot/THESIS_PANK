@@ -57,8 +57,8 @@ The script includes a `pyramidalizeImages` flag (default: `true`) that determine
 - These GeoJSON files are then imported into the QuPath project using the `00a_import_trident_geojson.groovy` script.
 
 ### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
-- Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions**.
-- Extracts 224x224 pixel tiles around detected cells
+- Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions** (annotations with class "Tissue (TRIDENT)").
+- Extracts 224x224 pixel tiles around detected cells.
 - Implemented in Groovy scripts for QuPath
 - Automated via `run_pipeline_01_02.sh`
 
@@ -152,7 +152,7 @@ After running TRIDENT segmentation, use this QuPath script to import the generat
 
 ### Step 1 & 2: Running Cell Segmentation and Tile Extraction (QuPath pipeline)
 
-After importing TRIDENT annotations, run the existing `run_pipeline_01_02.sh` script. This script will perform cell segmentation using StarDist (ideally configured to run within the "Tissue (TRIDENT)" annotations) and then extract cell tiles.
+After importing TRIDENT annotations, run the existing `run_pipeline_01_02.sh` script. This script will perform cell segmentation using StarDist (now configured to run specifically within the imported "Tissue (TRIDENT)" annotations) and then extract cell tiles.
 
 ```bash
 chmod +x run_pipeline_01_02.sh
@@ -217,6 +217,7 @@ This will:
 - Enhanced support for batch processing
 - **Added preliminary tissue segmentation step using TRIDENT toolkit.**
 - **Added Python script to run TRIDENT and Groovy script to import its GeoJSON output into QuPath.**
+- **Modified StarDist script (`01_he_stardist_cell_segmentation_shell_compatible.groovy`) to process only within "Tissue (TRIDENT)" annotations.**
 
 ## Output
 
