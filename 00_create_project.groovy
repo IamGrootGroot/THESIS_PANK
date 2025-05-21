@@ -131,24 +131,24 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
             try {
                 println "Attempting to use ${provider.name} provider..."
                 
-                def builder
+                def server
                 if (provider.builder != null) {
-                    // Try to build the server directly instead of using buildImageServers
-                    builder = provider.builder
-                    builder.uri(new URI("file:" + imagePath))
+                    // Try to detect and build the server directly
+                    server = provider.builder.detectServer(new URI("file:" + imagePath))
+                    if (server == null) {
+                        println "No server detected with ${provider.name} for " + file.getName()
+                        return false
+                    }
                 } else {
                     def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
                     if (support == null || support.builders.isEmpty()) {
                         println "No support available with ${provider.name} for " + file.getName()
                         return false
                     }
-                    builder = support.builders[0]
+                    server = support.builders[0].build()
                 }
                 
-                println "Using provider: " + builder.getClass().getName()
-                
-                // Create a server instance
-                def server = builder.build()
+                println "Using provider: " + server.getClass().getName()
                 println "Successfully built server with ${provider.name}"
                 println "Server metadata: " + server.getMetadata()
                 
@@ -163,7 +163,7 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
                         lastError = e
                         // Try without pyramidalization as a fallback
                         try {
-                            entry = project.addImage(builder)
+                            entry = project.addImage(server.getBuilder())
                             success = true
                         } catch (Exception e2) {
                             println "Error adding non-pyramidalized image: " + e2.getMessage()
@@ -173,7 +173,7 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
                     }
                 } else {
                     try {
-                        entry = project.addImage(builder)
+                        entry = project.addImage(server.getBuilder())
                         success = true
                     } catch (Exception e) {
                         println "Error adding image with ${provider.name}: " + e.getMessage()
