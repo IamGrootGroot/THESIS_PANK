@@ -20,7 +20,7 @@ import qupath.lib.images.servers.bioformats.BioFormatsServerBuilder
 import qupath.lib.images.servers.openslide.OpenslideServerBuilder
 
 // Define whether to pyramidalize images when adding them to the project
-def pyramidalizeImages = true
+// def pyramidalizeImages = true
 
 //Did we receive a string via the command line args keyword?
 if (args.size() > 0) {
