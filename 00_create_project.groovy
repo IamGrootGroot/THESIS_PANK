@@ -131,73 +131,70 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
             try {
                 println "Attempting to use ${provider.name} provider..."
                 
-                def support
+                def builder
                 if (provider.builder != null) {
-                    support = provider.builder.buildImageServers(new URI("file:" + imagePath))
+                    // Try to build the server directly instead of using buildImageServers
+                    builder = provider.builder
+                    builder.uri(new URI("file:" + imagePath))
                 } else {
-                    support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+                    def support = ImageServerProvider.getPreferredUriImageSupport(BufferedImage.class, imagePath)
+                    if (support == null || support.builders.isEmpty()) {
+                        println "No support available with ${provider.name} for " + file.getName()
+                        return false
+                    }
+                    builder = support.builders[0]
                 }
                 
-                if (support == null || support.builders.isEmpty()) {
-                    println "No support available with ${provider.name} for " + file.getName()
-                    return false
-                }
+                println "Using provider: " + builder.getClass().getName()
                 
-                println "Using provider: " + support.getClass().getName()
+                // Create a server instance
+                def server = builder.build()
+                println "Successfully built server with ${provider.name}"
+                println "Server metadata: " + server.getMetadata()
                 
-                // Process each scene
-                return support.builders.find { builder ->
-                    def sceneName = file.getName()
-                    
-                    if (support.builders.size() > 1)
-                        sceneName += " - Scene #" + (support.builders.indexOf(builder) + 1)
-                    
-                    // Create a pyramidalized server if requested
-                    if (pyramidalizeImages) {
-                        try {
-                            def server = builder.build()
-                            println "Successfully built server with ${provider.name}"
-                            println "Server metadata: " + server.getMetadata()
-                            
-                            def pyramidBuilder = ImageServers.pyramidalize(server).getBuilder()
-                            entry = project.addImage(pyramidBuilder)
-                            success = true
-                        } catch (Exception e) {
-                            println "Error creating pyramidalized server with ${provider.name} for " + sceneName + ": " + e.getMessage()
-                            lastError = e
-                            // Try without pyramidalization as a fallback
-                            try {
-                                entry = project.addImage(builder)
-                                success = true
-                            } catch (Exception e2) {
-                                println "Error adding non-pyramidalized image: " + e2.getMessage()
-                                lastError = e2
-                                return false
-                            }
-                        }
-                    } else {
+                // Create a pyramidalized server if requested
+                if (pyramidalizeImages) {
+                    try {
+                        def pyramidBuilder = ImageServers.pyramidalize(server).getBuilder()
+                        entry = project.addImage(pyramidBuilder)
+                        success = true
+                    } catch (Exception e) {
+                        println "Error creating pyramidalized server with ${provider.name} for " + file.getName() + ": " + e.getMessage()
+                        lastError = e
+                        // Try without pyramidalization as a fallback
                         try {
                             entry = project.addImage(builder)
                             success = true
-                        } catch (Exception e) {
-                            println "Error adding image with ${provider.name}: " + e.getMessage()
-                            lastError = e
+                        } catch (Exception e2) {
+                            println "Error adding non-pyramidalized image: " + e2.getMessage()
+                            lastError = e2
                             return false
                         }
                     }
-                    
+                } else {
+                    try {
+                        entry = project.addImage(builder)
+                        success = true
+                    } catch (Exception e) {
+                        println "Error adding image with ${provider.name}: " + e.getMessage()
+                        lastError = e
+                        return false
+                    }
+                }
+                
+                if (success) {
                     try {
                         imageData = entry.readImageData()
                         // Print image server information
-                        def server = imageData.getServer()
-                        println "Image server for " + sceneName + ":"
+                        server = imageData.getServer()
+                        println "Image server for " + file.getName() + ":"
                         println "  - Server class: " + server.getClass().getName()
                         println "  - Server metadata: " + server.getMetadata()
                         println "  - Server path: " + server.getPath()
                         println "  - Server URI: " + server.getURIs()
                         println "  - Server builder: " + server.getBuilder()
                         
-                        println "Adding: " + sceneName
+                        println "Adding: " + file.getName()
                     
                         // Set a particular image type automatically
                         def imageType = GuiTools.estimateImageType(server, imageRegionStore.getThumbnail(server, 0, 0, true));
@@ -212,23 +209,22 @@ selectedDir.eachFileRecurse (FileType.FILES) { file ->
                         entry.setThumbnail(img)
                         
                         // Add an entry name (the filename)
-                        entry.setImageName(sceneName)
+                        entry.setImageName(file.getName())
                         
-                        success = true
                         return true
                     } catch (Exception ex) {
-                        println sceneName +" -- Error reading image data " + ex
+                        println file.getName() +" -- Error reading image data " + ex
                         project.removeImage(entry, true)
                         lastError = ex
                         return false
                     }
                 }
+                return false
             } catch (Exception e) {
                 println "Error with ${provider.name} provider for " + file.getName() + ": " + e.getMessage()
                 lastError = e
                 return false
             }
-            return success
         }
         
         if (!success && lastError != null) {
