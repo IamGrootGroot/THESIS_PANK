@@ -107,9 +107,15 @@ python upload_contours_to_drive.py \
 
 ### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
 - Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions** (annotations with class "Tissue (TRIDENT)").
+- **Optimized for high-performance CPU processing (128-core server)** due to QuPath GPU incompatibility issues
+- **StarDist configuration optimized for parallel CPU processing:**
+  - Tile size: 1024px (optimal for CPU processing)
+  - Max image dimension: 16384px (leveraging CPU power)
+  - Parallel processing enabled for 128-core server
+  - Batch size: 4 (balanced for CPU efficiency)
 - Extracts 224x224 pixel tiles around detected cells.
 - Implemented in Groovy scripts for QuPath
-- Automated via `run_pipeline_01_02.sh`
+- Automated via `run_pipeline_01_02_with_stardist.sh`
 
 ### 2. Feature Extraction (Step 3)
 - Uses UNI2-h model from HuggingFace for feature extraction
@@ -348,16 +354,22 @@ This QC workflow enables efficient visual validation of TRIDENT tissue segmentat
 
 ### Step 1 & 2: Running Cell Segmentation and Tile Extraction (QuPath pipeline)
 
-After importing TRIDENT annotations, run the existing `run_pipeline_01_02.sh` script. This script will perform cell segmentation using StarDist (now configured to run specifically within the imported "Tissue (TRIDENT)" annotations) and then extract cell tiles.
+After importing TRIDENT annotations, run the optimized pipeline script. StarDist is now configured for high-performance CPU processing (optimized for 128-core servers) due to QuPath GPU compatibility issues.
 
 ```bash
-chmod +x run_pipeline_01_02.sh
-./run_pipeline_01_02.sh -p /path/to/project.qpproj -m /path/to/model.pb
+chmod +x run_pipeline_01_02_with_stardist.sh
+./run_pipeline_01_02_with_stardist.sh QuPath_MP_PDAC5/project.qpproj
 ```
+
+**Performance Optimizations for 128-core CPU:**
+- **Parallel processing enabled**: Leverages all 128 CPU cores
+- **Large tile processing**: 1024px tiles for efficient CPU utilization
+- **High-resolution support**: Up to 16384px max image dimensions
+- **Optimized batch size**: 4 tiles per batch for balanced memory usage
 
 This will:
 - Process all images already added to the QuPath project
-- Perform cell segmentation using StarDist
+- Perform cell segmentation using StarDist **within TRIDENT tissue regions only**
 - Extract 224x224 pixel tiles around detected cells
 - Save logs in the `logs/` directory
 
@@ -414,6 +426,8 @@ This will:
 - **Added preliminary tissue segmentation step using TRIDENT toolkit.**
 - **Added Python script to run TRIDENT and Groovy script to import its GeoJSON output into QuPath.**
 - **Modified StarDist script (`01_he_stardist_cell_segmentation_shell_compatible.groovy`) to process only within "Tissue (TRIDENT)" annotations.**
+- **Optimized StarDist pipeline for 128-core CPU processing due to QuPath GPU incompatibility issues**
+- **Enhanced parallel processing capabilities for high-performance computing environments**
 
 ## Output
 
