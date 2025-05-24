@@ -100,19 +100,23 @@ def find_visualization_files(trident_output_dir):
     trident_path = Path(trident_output_dir)
     visualization_files = []
     
-    # Look for visualization directories and files
+    # Look for thumbnails in the thumbnails directory (TRIDENT structure)
+    thumbnails_dir = trident_path / "thumbnails"
+    if thumbnails_dir.exists():
+        for img_file in thumbnails_dir.glob("*.jpg"):
+            visualization_files.append(img_file)
+        for img_file in thumbnails_dir.glob("*.jpeg"):
+            visualization_files.append(img_file)
+        for img_file in thumbnails_dir.glob("*.png"):
+            visualization_files.append(img_file)
+    
+    # Also look for visualization directories and files (fallback)
     for item in trident_path.rglob("*"):
         if item.is_file() and item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
             # Check if it's in a visualization directory or has visualization in name
             if 'visualization' in str(item) or 'thumbnail' in item.name.lower():
-                visualization_files.append(item)
-    
-    # Also look for any image files directly in output directories
-    for slide_dir in trident_path.iterdir():
-        if slide_dir.is_dir():
-            for img_file in slide_dir.rglob("*.jpg"):
-                if img_file not in visualization_files:
-                    visualization_files.append(img_file)
+                if item not in visualization_files:
+                    visualization_files.append(item)
     
     return visualization_files
 

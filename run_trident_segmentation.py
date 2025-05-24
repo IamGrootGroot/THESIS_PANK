@@ -118,7 +118,7 @@ def main():
     if return_code == 0:
         logger.info("TRIDENT batch segmentation completed successfully")
         # Check for segmentation outputs
-        segmentation_dir = trident_output_dir / "segmentations"
+        segmentation_dir = trident_output_dir / "contours_geojson"
         if segmentation_dir.exists():
             geojson_files = list(segmentation_dir.glob("*.geojson"))
             logger.info(f"Found {len(geojson_files)} GeoJSON segmentation files:")
