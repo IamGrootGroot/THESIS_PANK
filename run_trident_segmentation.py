@@ -2,14 +2,12 @@
 """
 Run TRIDENT Tissue Segmentation Script
 
-This script iterates through whole-slide images in a specified directory,
-runs TRIDENT's run_single_slide.py for tissue segmentation on each,
-and stores the output.
+This script runs TRIDENT's run_batch_of_slides.py for tissue segmentation
+on a directory of whole-slide images.
 
-TRIDENT is expected to create a job directory for each slide, structured as:
-<trident_base_output_dir>/<slide_name_without_extension>/
-And the GeoJSON segmentation file is expected at:
-<trident_base_output_dir>/<slide_name_without_extension>/segmentations/<slide_name_without_extension>.geojson
+TRIDENT is expected to create a job directory with segmentation results.
+The GeoJSON segmentation files are expected at:
+<trident_output_dir>/segmentations/<slide_name_without_extension>.geojson
 """
 
 import os
@@ -29,31 +27,31 @@ logger = logging.getLogger(__name__)
 # Supported WSI extensions by TRIDENT (this list can be expanded)
 SUPPORTED_EXTENSIONS = ['.svs', '.ndpi', '.tiff', '.tif', '.vsi', '.mrxs', '.scn']
 
-def run_trident_for_slide(trident_script_path, slide_path, slide_job_dir):
+def run_trident_batch_segmentation(trident_script_path, image_dir, output_dir, gpu=0):
     """
-    Executes TRIDENT's run_single_slide.py for a given slide.
+    Executes TRIDENT's run_batch_of_slides.py for tissue segmentation on all slides in a directory.
     """
     command = [
         "python",
         trident_script_path,
         "--task", "seg",
-        "--slide_path", str(slide_path),
-        "--job_dir", str(slide_job_dir)
+        "--wsi_dir", str(image_dir),
+        "--job_dir", str(output_dir),
+        "--gpu", str(gpu)
     ]
 
-    logger.info(f"Executing TRIDENT for {slide_path.name}: {' '.join(command)}")
+    logger.info(f"Executing TRIDENT batch segmentation: {' '.join(command)}")
     try:
         # Using shell=False for security and better control.
-        # Ensure python and trident_script_path are findable or use absolute paths.
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate()
 
         if process.returncode == 0:
-            logger.info(f"TRIDENT executed successfully for {slide_path.name}.")
+            logger.info(f"TRIDENT batch segmentation executed successfully.")
             if stdout:
                 logger.debug(f"TRIDENT stdout:\n{stdout}")
         else:
-            logger.error(f"TRIDENT execution failed for {slide_path.name} with exit code {process.returncode}.")
+            logger.error(f"TRIDENT batch segmentation failed with exit code {process.returncode}.")
             if stdout:
                 logger.error(f"TRIDENT stdout:\n{stdout}")
             if stderr:
@@ -64,7 +62,7 @@ def run_trident_for_slide(trident_script_path, slide_path, slide_job_dir):
         logger.error(f"Attempted command: {' '.join(command)}")
         return -1
     except Exception as e:
-        logger.error(f"An unexpected error occurred while running TRIDENT for {slide_path.name}: {e}")
+        logger.error(f"An unexpected error occurred while running TRIDENT batch segmentation: {e}")
         logger.error(f"Command was: {' '.join(command)}")
         return -1
 
@@ -73,9 +71,11 @@ def main():
     parser.add_argument("--image_dir", type=str, required=True,
                         help="Directory containing the whole-slide image files (e.g., .ndpi, .svs).")
     parser.add_argument("--trident_output_dir", type=str, required=True,
-                        help="Base directory where TRIDENT will create job-specific subdirectories for its output.")
+                        help="Base directory where TRIDENT will create its output.")
     parser.add_argument("--trident_script_path", type=str, required=True,
-                        help="Path to TRIDENT's run_single_slide.py script.")
+                        help="Path to TRIDENT's run_batch_of_slides.py script.")
+    parser.add_argument("--gpu", type=int, default=0,
+                        help="GPU index to use for processing. Default is 0.")
 
     args = parser.parse_args()
 
@@ -93,40 +93,41 @@ def main():
 
     # Create the base TRIDENT output directory if it doesn't exist
     trident_output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"TRIDENT base output directory: {trident_output_dir.resolve()}")
+    logger.info(f"TRIDENT output directory: {trident_output_dir.resolve()}")
 
-    processed_files = 0
-    failed_files = 0
+    # Check if there are supported image files in the directory
+    image_files = [f for f in image_dir.iterdir() 
+                   if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS]
+    
+    if not image_files:
+        logger.error(f"No supported image files found in {image_dir}")
+        return
+    
+    logger.info(f"Found {len(image_files)} image files to process")
+    for img_file in image_files:
+        logger.info(f"  - {img_file.name}")
 
-    for item in image_dir.iterdir():
-        if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS:
-            slide_name_no_ext = item.stem
-            slide_job_dir = trident_output_dir / slide_name_no_ext
-
-            # TRIDENT's run_single_slide.py creates the job_dir if it doesn't exist.
-            # We can ensure the parent (trident_output_dir) exists, which we did.
-
-            logger.info(f"Processing slide: {item.name}")
-            
-            return_code = run_trident_for_slide(
-                str(trident_script_path.resolve()), 
-                item.resolve(), 
-                str(slide_job_dir.resolve())
-            )
-            
-            if return_code == 0:
-                processed_files += 1
-                # Verify GeoJSON output (optional but good for confirmation)
-                expected_geojson = slide_job_dir / "segmentations" / f"{slide_name_no_ext}.geojson"
-                if expected_geojson.exists():
-                    logger.info(f"Verified GeoJSON output for {item.name} at {expected_geojson}")
-                else:
-                    logger.warning(f"GeoJSON file NOT found for {item.name} at expected location: {expected_geojson}")
-            else:
-                failed_files += 1
-            logger.info("-" * 50)
-
-    logger.info(f"TRIDENT processing complete. Processed {processed_files} slides. Failed {failed_files} slides.")
+    # Run TRIDENT batch segmentation
+    return_code = run_trident_batch_segmentation(
+        str(trident_script_path.resolve()), 
+        image_dir.resolve(), 
+        str(trident_output_dir.resolve()),
+        args.gpu
+    )
+    
+    if return_code == 0:
+        logger.info("TRIDENT batch segmentation completed successfully")
+        # Check for segmentation outputs
+        segmentation_dir = trident_output_dir / "segmentations"
+        if segmentation_dir.exists():
+            geojson_files = list(segmentation_dir.glob("*.geojson"))
+            logger.info(f"Found {len(geojson_files)} GeoJSON segmentation files:")
+            for geojson_file in geojson_files:
+                logger.info(f"  - {geojson_file.name}")
+        else:
+            logger.warning(f"Segmentation directory not found at {segmentation_dir}")
+    else:
+        logger.error("TRIDENT batch segmentation failed")
 
 if __name__ == "__main__":
     main() 
