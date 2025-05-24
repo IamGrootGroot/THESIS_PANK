@@ -82,9 +82,41 @@ project.getImageList().eachWithIndex { entry, index ->
         def tridentClass = getPathClass(TRIDENT_CLASS_NAME)
         def tridentAnnotations = []
         
+        // Debug: List all annotations and their classes
+        def allAnnotations = hierarchy.getAnnotationObjects()
+        println "  Debug: Found ${allAnnotations.size()} total annotations"
+        if (!allAnnotations.isEmpty()) {
+            allAnnotations.eachWithIndex { annotation, idx ->
+                def className = annotation.getPathClass()?.getName() ?: "No class"
+                println "    Annotation ${idx + 1}: Class = '${className}'"
+            }
+        }
+        
+        // Try to find TRIDENT annotations with exact class name first
         if (tridentClass != null) {
             tridentAnnotations = hierarchy.getAnnotationObjects().findAll { 
                 it.getPathClass() == tridentClass 
+            }
+            println "  Found ${tridentAnnotations.size()} annotations with exact class '${TRIDENT_CLASS_NAME}'"
+        } else {
+            println "  PathClass '${TRIDENT_CLASS_NAME}' not found in project"
+            
+            // Try to find annotations with "TRIDENT" in the name (case insensitive)
+            tridentAnnotations = hierarchy.getAnnotationObjects().findAll { annotation ->
+                def className = annotation.getPathClass()?.getName()
+                return className != null && className.toLowerCase().contains("trident")
+            }
+            println "  Found ${tridentAnnotations.size()} annotations containing 'trident' in class name"
+            
+            // If still no TRIDENT annotations, try "Tissue" class
+            if (tridentAnnotations.isEmpty()) {
+                def tissueClass = getPathClass("Tissue")
+                if (tissueClass != null) {
+                    tridentAnnotations = hierarchy.getAnnotationObjects().findAll { 
+                        it.getPathClass() == tissueClass 
+                    }
+                    println "  Found ${tridentAnnotations.size()} annotations with 'Tissue' class"
+                }
             }
         }
         

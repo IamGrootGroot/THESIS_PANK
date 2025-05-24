@@ -100,12 +100,20 @@ def find_qc_thumbnail_files(qc_thumbnails_dir):
         thumbnail_files.extend(qc_path.rglob(f"*qc_thumbnail{ext}"))
         thumbnail_files.extend(qc_path.rglob(f"*thumbnail{ext}"))
     
-    # Also look for any image files in the directory
+    # Also look for any image files in the directory if no specific thumbnails found
     if not thumbnail_files:
         for ext in ['.jpg', '.jpeg', '.png']:
             thumbnail_files.extend(qc_path.rglob(f"*{ext}"))
     
-    return thumbnail_files
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_files = []
+    for file_path in thumbnail_files:
+        if file_path not in seen:
+            seen.add(file_path)
+            unique_files.append(file_path)
+    
+    return unique_files
 
 def upload_file_to_drive(service, file_path, folder_id):
     """
