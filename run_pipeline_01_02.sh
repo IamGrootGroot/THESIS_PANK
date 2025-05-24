@@ -14,6 +14,7 @@
 # =============================================================================
 # Common QuPath installation paths on Linux servers
 QUPATH_PATHS=(
+    "/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/bin/QuPath"
     "/opt/QuPath/bin/QuPath"
     "/usr/local/bin/QuPath"
     "/home/pellouxp/QuPath/bin/QuPath"
@@ -21,23 +22,38 @@ QUPATH_PATHS=(
 )
 
 # Find QuPath installation
-QUPATH_PATH=""
-for path in "${QUPATH_PATHS[@]}"; do
-    if [ -f "$path" ] && [ -x "$path" ]; then
-        QUPATH_PATH="$path"
-        break
+QUPATH_FOUND=""
+if [ -n "$QUPATH_PATH" ]; then
+    # Use custom QuPath path if provided
+    if [ -f "$QUPATH_PATH" ] && [ -x "$QUPATH_PATH" ]; then
+        QUPATH_FOUND="$QUPATH_PATH"
+        echo "Using custom QuPath path: $QUPATH_FOUND"
+    else
+        echo "Error: Custom QuPath path not found or not executable: $QUPATH_PATH"
+        exit 1
     fi
-done
+else
+    # Search in predefined locations
+    for path in "${QUPATH_PATHS[@]}"; do
+        if [ -f "$path" ] && [ -x "$path" ]; then
+            QUPATH_FOUND="$path"
+            break
+        fi
+    done
+fi
 
-if [ -z "$QUPATH_PATH" ]; then
+if [ -z "$QUPATH_FOUND" ]; then
     echo "Error: QuPath not found. Please install QuPath or add it to PATH"
     echo "Searched in:"
     for path in "${QUPATH_PATHS[@]}"; do
         [ -n "$path" ] && echo "  - $path"
     done
+    echo
+    echo "You can also specify a custom QuPath path with -q/--qupath option"
     exit 1
 fi
 
+QUPATH_PATH="$QUPATH_FOUND"
 echo "Found QuPath at: $QUPATH_PATH"
 
 # =============================================================================
@@ -49,6 +65,7 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH    Path to QuPath project directory"
     echo "  -m, --model PATH      Path to StarDist model file (.pb)"
+    echo "  -q, --qupath PATH     Path to QuPath executable (optional)"
     echo "  -g, --gpu BOOL        Enable GPU acceleration (true/false, default: true)"
     echo "  -d, --device ID       GPU device ID (default: 0)"
     echo "  -h, --help           Show this help message"
@@ -56,6 +73,7 @@ show_help() {
     echo "Example:"
     echo "  $0 -p /path/to/HE/QuPath_MP_PDAC5 -m /path/to/models/he_heavy_augment.pb"
     echo "  $0 -p /path/to/project -m /path/to/model.pb -g true -d 0"
+    echo "  $0 -p /path/to/project -m /path/to/model.pb -q /custom/path/to/QuPath"
     echo
     echo "Note: GPU acceleration requires CUDA-compatible QuPath build and drivers."
     echo "IMPORTANT: Images must be already added to the QuPath project through the GUI."
@@ -117,6 +135,7 @@ exec 2> >(tee -a "$LOG_FILE" "$ERROR_LOG" >&2)
 # Initialize variables
 PROJECT_PATH=""
 MODEL_PATH=""
+QUPATH_PATH=""  # Allow custom QuPath path
 USE_GPU="true"
 GPU_DEVICE="0"
 
@@ -129,6 +148,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             MODEL_PATH="$2"
+            shift 2
+            ;;
+        -q|--qupath)
+            QUPATH_PATH="$2"
             shift 2
             ;;
         -g|--gpu)
