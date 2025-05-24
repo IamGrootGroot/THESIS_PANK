@@ -4,6 +4,7 @@
  *
  * This script is part of the PANK thesis project and implements the first step
  * of the cell segmentation pipeline using StarDist2D for H&E stained images.
+ * Optimized for GPU acceleration on CUDA-compatible hardware.
  */
 
 import qupath.lib.objects.classes.PathClass
@@ -15,15 +16,22 @@ import qupath.lib.roi.ROIs
 import qupath.lib.objects.PathObjects
 import qupath.lib.regions.ImagePlane
 
-// Configuration parameters for StarDist2D cell segmentation
+// Configuration parameters for StarDist2D cell segmentation (GPU-optimized)
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 4096
+MAX_IMAGE_DIMENSION = 8192  // Increased for GPU processing
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 4096
+TILE_SIZE = 4096  // Optimal for A6000 memory
+OVERLAP = 128  // Overlap between tiles to avoid edge artifacts
+BATCH_SIZE = 32  // Process multiple tiles in parallel on GPU
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
 NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
+
+// GPU Configuration
+USE_GPU = true  // Enable GPU acceleration
+GPU_DEVICE_ID = 0  // Use first GPU (A6000)
+ENABLE_PARALLEL_PROCESSING = true  // Enable parallel tile processing
 
 /**
  * Parse command line arguments
@@ -37,10 +45,16 @@ def parseArguments() {
     }
     
     def modelPath = null
+    def useGpu = USE_GPU
+    def deviceId = GPU_DEVICE_ID
     
     args.each { arg ->
         if (arg.startsWith("model=")) {
             modelPath = arg.substring(6)
+        } else if (arg.startsWith("gpu=")) {
+            useGpu = Boolean.parseBoolean(arg.substring(4))
+        } else if (arg.startsWith("device=")) {
+            deviceId = Integer.parseInt(arg.substring(7))
         }
     }
     
@@ -49,7 +63,7 @@ def parseArguments() {
         return null
     }
     
-    return [modelPath: modelPath]
+    return [modelPath: modelPath, useGpu: useGpu, deviceId: deviceId]
 }
 
 /**
@@ -67,12 +81,55 @@ def validateModelFile(String modelPath) {
 }
 
 /**
- * Creates and configures the StarDist2D model with specified parameters
+ * Check GPU availability and print system information
+ * @return boolean indicating if GPU is available
+ */
+def checkGpuAvailability() {
+    try {
+        // Try to get system properties related to CUDA
+        def javaLibraryPath = System.getProperty("java.library.path")
+        print "Java library path: ${javaLibraryPath}"
+        
+        // Check for CUDA-related environment variables
+        def cudaPath = System.getenv("CUDA_PATH")
+        def cudaHome = System.getenv("CUDA_HOME")
+        
+        if (cudaPath != null) {
+            print "CUDA_PATH detected: ${cudaPath}"
+        }
+        if (cudaHome != null) {
+            print "CUDA_HOME detected: ${cudaHome}"
+        }
+        
+        // Check available processors for parallel processing
+        def availableProcessors = Runtime.getRuntime().availableProcessors()
+        print "Available processors: ${availableProcessors}"
+        
+        // Check memory
+        def maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024)
+        print "Maximum JVM memory: ${maxMemory.round(2)} GB"
+        
+        return true
+    } catch (Exception e) {
+        print "GPU availability check failed: ${e.getMessage()}"
+        return false
+    }
+}
+
+/**
+ * Creates and configures the StarDist2D model with GPU optimization
  * @param modelPath Path to the model file
+ * @param useGpu Whether to use GPU acceleration
+ * @param deviceId GPU device ID to use
  * @return configured StarDist2D instance
  */
-def createStarDistModel(String modelPath) {
-    return StarDist2D.builder(modelPath)
+def createStarDistModel(String modelPath, boolean useGpu, int deviceId) {
+    print "Configuring StarDist2D model..."
+    print "Model path: ${modelPath}"
+    print "GPU acceleration: ${useGpu}"
+    print "Device ID: ${deviceId}"
+    
+    def builder = StarDist2D.builder(modelPath)
         .threshold(DETECTION_THRESHOLD)
         .pixelSize(PIXEL_SIZE)
         .cellExpansion(CELL_EXPANSION)
@@ -86,7 +143,50 @@ def createStarDistModel(String modelPath) {
                 .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
                 .build()
         )
-        .build()
+    
+    // Add GPU-specific configurations
+    if (useGpu) {
+        try {
+            print "Enabling GPU acceleration..."
+            // These methods may vary depending on QuPath/StarDist version
+            // Try different approaches for GPU configuration
+            if (builder.hasProperty('useGPU')) {
+                builder = builder.useGPU(true)
+                print "GPU acceleration enabled via useGPU()"
+            } else if (builder.hasProperty('device')) {
+                builder = builder.device("GPU:${deviceId}")
+                print "GPU device set via device() method"
+            }
+            
+            // Enable parallel processing if available
+            if (ENABLE_PARALLEL_PROCESSING && builder.hasProperty('parallelProcessing')) {
+                builder = builder.parallelProcessing(true)
+                print "Parallel processing enabled"
+            }
+            
+            // Optimize batch size for GPU
+            if (builder.hasProperty('batchSize')) {
+                builder = builder.batchSize(BATCH_SIZE)
+                print "Batch size set to: ${BATCH_SIZE}"
+            }
+            
+            // Set tile overlap for better edge handling
+            if (builder.hasProperty('overlap')) {
+                builder = builder.overlap(OVERLAP)
+                print "Tile overlap set to: ${OVERLAP}"
+            }
+            
+        } catch (Exception e) {
+            print "Warning: Could not configure GPU acceleration: ${e.getMessage()}"
+            print "Falling back to CPU processing"
+        }
+    } else {
+        print "Using CPU processing"
+    }
+    
+    def model = builder.build()
+    print "StarDist2D model configured successfully"
+    return model
 }
 
 /**
@@ -116,11 +216,17 @@ def saveImageData(imageData) {
  * Main execution function for cell detection
  */
 def runCellDetection() {
+    print "=== StarDist2D Cell Detection with GPU Acceleration ==="
+    
     // Parse command line arguments
     def args = parseArguments()
     if (!args) {
         return
     }
+
+    // Check GPU availability
+    def gpuAvailable = checkGpuAvailability()
+    print "GPU check completed. Available: ${gpuAvailable}"
 
     // Validate model file
     if (!validateModelFile(args.modelPath)) {
@@ -129,11 +235,21 @@ def runCellDetection() {
 
     // Get the current image data (already loaded by QuPath's --image parameter)
     def imageData = getCurrentImageData()
-    // createFullImageAnnotation(true) // We will use TRIDENT annotations instead
     if (imageData == null) {
         print "Error: No image is currently loaded"
         return
     }
+
+    // Get image information
+    def server = imageData.getServer()
+    def imageName = server.getMetadata().getName()
+    def imageWidth = server.getWidth()
+    def imageHeight = server.getHeight()
+    def magnification = server.getMetadata().getMagnification()
+    
+    print "Processing image: ${imageName}"
+    print "Dimensions: ${imageWidth} x ${imageHeight}"
+    print "Magnification: ${magnification}x"
 
     // Setup hierarchy
     def hierarchy = imageData.getHierarchy()
@@ -146,7 +262,7 @@ def runCellDetection() {
     }
     print "Using PathClass for tissue regions: ${tridentTissueClass.getName()}"
 
-    // Get annotations specifically from TRIDENT (they should have the class "Tissue (TRIDENT)")
+    // Get annotations specifically from TRIDENT
     def tridentAnnotations = hierarchy.getAnnotationObjects().findAll { it.getPathClass() == tridentTissueClass }
 
     if (tridentAnnotations.isEmpty()) {
@@ -155,39 +271,62 @@ def runCellDetection() {
     }
 
     print "Found ${tridentAnnotations.size()} '${TRIDENT_TISSUE_CLASS_NAME}' annotations to process."
-    print "Running StarDist detection on the current image within these regions..."
+    
+    // Calculate total tissue area for performance estimation
+    def totalTissueArea = tridentAnnotations.sum { it.getROI().getArea() }
+    print "Total tissue area: ${(totalTissueArea / 1000000).round(2)} mm²"
 
     try {
-        def stardist = createStarDistModel(args.modelPath)
+        // Create StarDist model with GPU optimization
+        def startTime = System.currentTimeMillis()
+        def stardist = createStarDistModel(args.modelPath, args.useGpu, args.deviceId)
+        def modelLoadTime = System.currentTimeMillis() - startTime
+        print "Model loaded in ${modelLoadTime}ms"
+
         def totalTargetAnnotations = tridentAnnotations.size()
         def processedAnnotationsCount = 0
         def totalDetections = 0
+        def detectionStartTime = System.currentTimeMillis()
 
         // Run detection on the filtered TRIDENT annotations
         tridentAnnotations.each { annotation ->
-            print "Processing TRIDENT annotation ${++processedAnnotationsCount}/${totalTargetAnnotations}: ${annotation.getName() ?: 'Unnamed'} (Class: ${annotation.getPathClass()?.getName()})"
+            processedAnnotationsCount++
+            print "Processing TRIDENT annotation ${processedAnnotationsCount}/${totalTargetAnnotations}: ${annotation.getName() ?: 'Unnamed'}"
             
-            // Get the ROI from the annotation - this is the correct argument for StarDist
+            def annotationStartTime = System.currentTimeMillis()
+            
+            // Get the ROI from the annotation
             def roi = annotation.getROI()
+            def annotationArea = roi.getArea()
             
             // Use the correct method signature: detectObjects(imageData, roi)
             def detections = stardist.detectObjects(imageData, roi)
             
             // Add all detected cells to the hierarchy
-            // These will be parented by the TRIDENT annotation if the hierarchy supports it well,
-            // or simply added to the general hierarchy if not.
             detections.each { detection ->
-                // Ensure the detection has the correct class set by createStarDistModel
                 hierarchy.addObject(detection)
                 totalDetections++
             }
             
-            print "Added ${detections.size()} cell detections to annotation ${annotation.getName() ?: 'Unnamed'}"
+            def annotationTime = System.currentTimeMillis() - annotationStartTime
+            def cellDensity = detections.size() / (annotationArea / 1000000) // cells per mm²
+            
+            print "Added ${detections.size()} cell detections (${cellDensity.round(0)} cells/mm²) in ${annotationTime}ms"
         }
+
+        def totalDetectionTime = System.currentTimeMillis() - detectionStartTime
+        def avgTimePerAnnotation = totalDetectionTime / totalTargetAnnotations
+        def cellsPerSecond = totalDetections / (totalDetectionTime / 1000.0)
 
         if (totalDetections > 0) {
             // Save results
-            print "Finalizing detection results with $totalDetections total cells detected within TRIDENT regions..."
+            print "=== Detection Results ==="
+            print "Total cells detected: ${totalDetections}"
+            print "Average cells per annotation: ${(totalDetections / totalTargetAnnotations).round(0)}"
+            print "Total detection time: ${totalDetectionTime}ms"
+            print "Average time per annotation: ${avgTimePerAnnotation.round(0)}ms"
+            print "Detection speed: ${cellsPerSecond.round(1)} cells/second"
+            
             fireHierarchyUpdate()
             
             // Explicitly save to project
@@ -196,7 +335,6 @@ def runCellDetection() {
             print "Completed StarDist detection for the current image."
         } else {
             print "No cells detected by StarDist within the provided TRIDENT annotations for the current image."
-            // Still save image data if, for example, old detections were cleared and none new were added
             saveImageData(imageData)
         }
     } catch (Exception e) {

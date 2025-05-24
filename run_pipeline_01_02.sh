@@ -49,12 +49,15 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH    Path to QuPath project directory"
     echo "  -m, --model PATH      Path to StarDist model file (.pb)"
+    echo "  -g, --gpu BOOL        Enable GPU acceleration (true/false, default: true)"
+    echo "  -d, --device ID       GPU device ID (default: 0)"
     echo "  -h, --help           Show this help message"
     echo
     echo "Example:"
     echo "  $0 -p /path/to/HE/QuPath_MP_PDAC5 -m /path/to/models/he_heavy_augment.pb"
+    echo "  $0 -p /path/to/project -m /path/to/model.pb -g true -d 0"
     echo
-    echo "Note: All paths are required. The script will validate their existence."
+    echo "Note: GPU acceleration requires CUDA-compatible QuPath build and drivers."
     echo "IMPORTANT: Images must be already added to the QuPath project through the GUI."
     exit 1
 }
@@ -114,6 +117,8 @@ exec 2> >(tee -a "$LOG_FILE" "$ERROR_LOG" >&2)
 # Initialize variables
 PROJECT_PATH=""
 MODEL_PATH=""
+USE_GPU="true"
+GPU_DEVICE="0"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -124,6 +129,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             MODEL_PATH="$2"
+            shift 2
+            ;;
+        -g|--gpu)
+            USE_GPU="$2"
+            shift 2
+            ;;
+        -d|--device)
+            GPU_DEVICE="$2"
             shift 2
             ;;
         -h|--help)
@@ -149,7 +162,7 @@ fi
 clear
 echo -e "\033[1;35m===============================================\033[0m"
 echo -e "\033[1;35m     PANK Thesis Project - Cell Segmentation   \033[0m"
-echo -e "\033[1;35m     Server Version\033[0m"
+echo -e "\033[1;35m     Server Version with GPU Acceleration      \033[0m"
 echo -e "\033[1;35m===============================================\033[0m"
 echo
 
@@ -158,6 +171,34 @@ log "Starting pipeline execution"
 log "Project path: $PROJECT_PATH"
 log "Model path: $MODEL_PATH"
 log "QuPath path: $QUPATH_PATH"
+log "GPU acceleration: $USE_GPU"
+log "GPU device: $GPU_DEVICE"
+echo
+
+# =============================================================================
+# GPU Environment Check
+# =============================================================================
+log "Checking GPU environment..."
+
+# Check NVIDIA GPU
+if command -v nvidia-smi &> /dev/null; then
+    nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader,nounits | while IFS=, read name memory_total memory_free; do
+        log "GPU detected: $name"
+        log "GPU memory: ${memory_free}MB free / ${memory_total}MB total"
+    done
+else
+    log "Warning: nvidia-smi not found. GPU detection unavailable."
+fi
+
+# Check CUDA environment
+if [ -n "$CUDA_HOME" ]; then
+    log "CUDA_HOME: $CUDA_HOME"
+elif [ -n "$CUDA_PATH" ]; then
+    log "CUDA_PATH: $CUDA_PATH"
+else
+    log "Warning: CUDA environment variables not set"
+fi
+
 echo
 
 # =============================================================================
@@ -221,9 +262,10 @@ fi
 log "Processing all images in the QuPath project..."
 
 # Step 1: Run cell segmentation on all images in the project
-log "Executing Cell Segmentation (StarDist) on all images"
+log "Executing Cell Segmentation (StarDist) with GPU acceleration on all images"
+STARDIST_ARGS="model=$MODEL_PATH,gpu=$USE_GPU,device=$GPU_DEVICE"
 if ! "$QUPATH_PATH" script --project="$QPPROJ_FILE" \
-                --args="model=$MODEL_PATH" \
+                --args="$STARDIST_ARGS" \
                 "$CELL_SEG_SCRIPT" \
                 > "$QUPATH_LOG" 2>&1; then
     error_log "Cell segmentation failed. Check $QUPATH_LOG for details."
@@ -246,6 +288,22 @@ if ! "$QUPATH_PATH" script --project="$QPPROJ_FILE" \
     exit 1
 fi
 log "Cell tile extraction completed successfully"
+
+# =============================================================================
+# Performance Summary
+# =============================================================================
+log "Extracting performance statistics from QuPath logs..."
+if [ -f "$QUPATH_LOG" ]; then
+    # Extract timing information from logs
+    DETECTION_SPEED=$(grep "Detection speed:" "$QUPATH_LOG" | tail -1 | awk '{print $3}')
+    TOTAL_CELLS=$(grep "Total cells detected:" "$QUPATH_LOG" | tail -1 | awk '{print $4}')
+    
+    if [ -n "$DETECTION_SPEED" ] && [ -n "$TOTAL_CELLS" ]; then
+        log "Performance Summary:"
+        log "  Total cells detected: $TOTAL_CELLS"
+        log "  Detection speed: $DETECTION_SPEED cells/second"
+    fi
+fi
 
 # =============================================================================
 # Pipeline Completion
