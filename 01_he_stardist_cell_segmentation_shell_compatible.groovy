@@ -16,23 +16,23 @@ import qupath.lib.roi.ROIs
 import qupath.lib.objects.PathObjects
 import qupath.lib.regions.ImagePlane
 
-// Configuration parameters for StarDist2D cell segmentation (A6000 optimized)
+// Configuration parameters for StarDist2D cell segmentation (RTX 6000 Ada optimized)
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 16384  // Increased for A6000
+MAX_IMAGE_DIMENSION = 20480  // Increased for RTX 6000 Ada (49GB VRAM)
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 2048  // Increased for A6000
-OVERLAP = 128  // Increased for A6000
-BATCH_SIZE = 64  // Increased for A6000
+TILE_SIZE = 2560  // Increased for RTX 6000 Ada
+OVERLAP = 160  // Increased for RTX 6000 Ada
+BATCH_SIZE = 80  // Increased for RTX 6000 Ada
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)"
 NUCLEUS_CLASS_NAME = "Nucleus"
 MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 
-// GPU Configuration - optimized for A6000
+// GPU Configuration - optimized for RTX 6000 Ada Generation
 USE_GPU = true
 GPU_DEVICE_ID = 0
-ENABLE_PARALLEL_PROCESSING = true  // Enabled for A6000
+ENABLE_PARALLEL_PROCESSING = true  // Enabled for RTX 6000 Ada
 
 /**
  * Parse command line arguments
