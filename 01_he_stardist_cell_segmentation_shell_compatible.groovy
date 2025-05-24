@@ -16,23 +16,23 @@ import qupath.lib.roi.ROIs
 import qupath.lib.objects.PathObjects
 import qupath.lib.regions.ImagePlane
 
-// Configuration parameters for StarDist2D cell segmentation (RTX 6000 Ada optimized)
+// Configuration parameters for StarDist2D cell segmentation (128-core CPU optimized)
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 20480  // Increased for RTX 6000 Ada (49GB VRAM)
+MAX_IMAGE_DIMENSION = 16384  // Larger for powerful CPU
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 2560  // Increased for RTX 6000 Ada
-OVERLAP = 160  // Increased for RTX 6000 Ada
-BATCH_SIZE = 80  // Increased for RTX 6000 Ada
+TILE_SIZE = 1024  // Optimal CPU tile size
+OVERLAP = 64  // Balanced overlap
+BATCH_SIZE = 4  // Small batches for CPU but still faster
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)"
 NUCLEUS_CLASS_NAME = "Nucleus"
 MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 
-// GPU Configuration - optimized for RTX 6000 Ada Generation
-USE_GPU = true
+// CPU Configuration - optimized for 128-core server
+USE_GPU = false
 GPU_DEVICE_ID = 0
-ENABLE_PARALLEL_PROCESSING = true  // Enabled for RTX 6000 Ada
+ENABLE_PARALLEL_PROCESSING = true  // Enable for 128-core beast!
 
 /**
  * Parse command line arguments
@@ -217,7 +217,7 @@ def saveImageData(imageData) {
  * Main execution function for cell detection
  */
 def runCellDetection() {
-    print "=== StarDist2D Cell Detection with A6000 Optimization ==="
+    print "=== StarDist2D Cell Detection with CPU Processing ==="
     
     // Parse command line arguments
     def args = parseArguments()
