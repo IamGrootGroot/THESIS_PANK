@@ -15,6 +15,7 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ├── run_trident_segmentation.py
 ├── generate_drive_token.py
 ├── upload_contours_to_drive.py
+├── run_import_trident_geojson.sh
 ├── run_pipeline_01_02.sh
 ├── run_pipeline_03.sh
 └── logs/
@@ -187,6 +188,7 @@ python run_trident_segmentation.py \
 
 After running TRIDENT segmentation, use this QuPath script to import the generated GeoJSON files into your QuPath project. Ensure your QuPath project is open and contains the images processed by TRIDENT.
 
+#### Manual Import (Single Project)
 ```bash
 /path/to/QuPath script 00a_import_trident_geojson.groovy --args /path/to/trident_outputs/
 ```
@@ -194,6 +196,55 @@ After running TRIDENT segmentation, use this QuPath script to import the generat
 - Replace `/path/to/QuPath` with your QuPath executable path.
 - The argument `/path/to/trident_outputs/` must be the **same** directory used as `--trident_output_dir` in the Python script.
 - This will add the TRIDENT segmentations as annotations with the class "Tissue (TRIDENT)" to the corresponding images in QuPath.
+
+#### Automated Import (Multiple Projects)
+
+For batch processing of multiple QuPath projects, use the automated bash script:
+
+```bash
+chmod +x run_import_trident_geojson.sh
+
+# Test with your 5-image project first
+./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -s
+
+# Process a specific project
+./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100/project.qpproj
+
+# Process all projects (600 images across all projects)
+./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -a
+```
+
+**Script Features:**
+- **Flexible QuPath path**: Set via environment variable (`export QUPATH_PATH=/path/to/QuPath`) or script configuration
+- **Multiple processing modes**: 
+  - `-s, --test`: Process only test project (QuPath_MP_PDAC5)
+  - `-p, --project`: Process specific project file
+  - `-a, --all`: Process all QuPath projects in current directory
+- **Comprehensive logging**: Timestamped logs with progress tracking
+- **Error handling**: Validates inputs and handles failures gracefully
+- **Progress tracking**: Shows progress when processing multiple projects
+
+**Before Running:**
+1. **Set the correct QuPath path** for your server:
+   ```bash
+   export QUPATH_PATH=/path/to/your/QuPath/installation
+   ```
+
+2. **Verify your TRIDENT output structure** matches expected format:
+   ```
+   trident_output/contours_geoJSON/
+   ├── 00000664-00767663-23HI014130-1-A01-1/
+   │   └── segmentations/
+   │       └── 00000664-00767663-23HI014130-1-A01-1.geojson
+   └── ...
+   ```
+
+**Recommended Testing Approach:**
+1. Start with test project: `./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -s`
+2. Try one larger project: `./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100/project.qpproj`
+3. Process all projects: `./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -a`
+
+The script creates detailed logs in the `logs/` directory for tracking progress and debugging.
 
 ### Step 1 & 2: Running Cell Segmentation and Tile Extraction (QuPath pipeline)
 
