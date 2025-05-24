@@ -6,7 +6,7 @@
 # All rights reserved.
 #
 # This script exports annotated thumbnails from QuPath projects for QC
-# and optionally uploads them to Google Drive for easy review.
+# and automatically uploads them to Google Drive for easy review.
 # =============================================================================
 
 # =============================================================================
@@ -24,8 +24,9 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH     Path to QuPath project file (.qpproj)"
     echo "  -o, --output DIR       Output directory for thumbnails (default: qc_thumbnails)"
-    echo "  -u, --upload           Upload to Google Drive after export"
-    echo "  -d, --drive-folder ID  Google Drive folder ID (required if --upload used)"
+    echo "  -c, --credentials FILE Path to Google Drive credentials file (default: drive_credentials.json)"
+    echo "  -t, --token FILE       Path to token file (default: token.json)"
+    echo "  -f, --folder NAME      Custom Google Drive folder name"
     echo "  -s, --test             Process test project (QuPath_MP_PDAC5/project.qpproj)"
     echo "  -a, --all              Process all QuPath projects in current directory"
     echo "  -h, --help            Show this help message"
@@ -33,11 +34,12 @@ show_help() {
     echo "Examples:"
     echo "  $0 -s                                    # Export QC thumbnails for test project"
     echo "  $0 -p QuPath_MP_PDAC100/project.qpproj  # Export for specific project"
-    echo "  $0 -a -u -d 1xXxXxXxXxXxXxXxXxXxXx       # Export all projects and upload to Drive"
+    echo "  $0 -a                                    # Export all projects and upload to Drive"
     echo
     echo "Prerequisites:"
     echo "  - QuPath must be installed and QUPATH_PATH set correctly"
-    echo "  - For Google Drive upload: 'rclone' must be configured"
+    echo "  - Google Drive credentials and token files must be available"
+    echo "  - Python with required packages (google-api-python-client, etc.)"
     echo
     exit 1
 }
@@ -73,8 +75,9 @@ warn_log() {
 # =============================================================================
 PROJECT_PATH=""
 OUTPUT_DIR="qc_thumbnails"
-UPLOAD_TO_DRIVE=false
-DRIVE_FOLDER_ID=""
+CREDENTIALS_FILE="drive_credentials.json"
+TOKEN_FILE="token.json"
+CUSTOM_FOLDER_NAME=""
 PROCESS_TEST=false
 PROCESS_ALL=false
 
@@ -88,12 +91,16 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        -u|--upload)
-            UPLOAD_TO_DRIVE=true
-            shift
+        -c|--credentials)
+            CREDENTIALS_FILE="$2"
+            shift 2
             ;;
-        -d|--drive-folder)
-            DRIVE_FOLDER_ID="$2"
+        -t|--token)
+            TOKEN_FILE="$2"
+            shift 2
+            ;;
+        -f|--folder)
+            CUSTOM_FOLDER_NAME="$2"
             shift 2
             ;;
         -s|--test)
@@ -124,17 +131,22 @@ if [ ! -f "$QUPATH_PATH" ]; then
     exit 1
 fi
 
-# Validate upload requirements
-if [ "$UPLOAD_TO_DRIVE" = true ]; then
-    if [ -z "$DRIVE_FOLDER_ID" ]; then
-        error_log "Google Drive folder ID required when using --upload"
-        show_help
-    fi
-    
-    if ! command -v rclone &> /dev/null; then
-        error_log "rclone not found. Please install and configure rclone for Google Drive upload"
-        exit 1
-    fi
+# Check Google Drive authentication files
+if [ ! -f "$CREDENTIALS_FILE" ]; then
+    error_log "Google Drive credentials file not found: $CREDENTIALS_FILE"
+    exit 1
+fi
+
+if [ ! -f "$TOKEN_FILE" ]; then
+    error_log "Google Drive token file not found: $TOKEN_FILE"
+    error_log "Please run generate_drive_token.py first"
+    exit 1
+fi
+
+# Check Python
+if ! command -v python3 &> /dev/null; then
+    error_log "python3 not found. Please install Python 3"
+    exit 1
 fi
 
 # Determine projects to process
@@ -174,10 +186,8 @@ echo
 log "Starting QC thumbnail export pipeline"
 log "Output directory: $OUTPUT_DIR"
 log "Projects to process: ${#PROJECTS_TO_PROCESS[@]}"
-
-if [ "$UPLOAD_TO_DRIVE" = true ]; then
-    log "Will upload to Google Drive folder: $DRIVE_FOLDER_ID"
-fi
+log "Google Drive credentials: $CREDENTIALS_FILE"
+log "Google Drive token: $TOKEN_FILE"
 
 echo
 
@@ -187,6 +197,8 @@ mkdir -p "$OUTPUT_DIR"
 # Process each project
 SUCCESSFUL_EXPORTS=0
 FAILED_EXPORTS=0
+SUCCESSFUL_UPLOADS=0
+FAILED_UPLOADS=0
 
 for project in "${PROJECTS_TO_PROCESS[@]}"; do
     project_name=$(basename "$(dirname "$project")")
@@ -195,7 +207,8 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Processing project: $project_name"
     log "Project file: $project"
     
-    # Run QuPath export script
+    # Step 1: Run QuPath export script
+    log "Exporting QC thumbnails with TRIDENT annotations..."
     if "$QUPATH_PATH" script --project="$project" \
                       --args="$project_output_dir" \
                       00b_export_annotated_thumbnails_qc.groovy \
@@ -203,18 +216,38 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
         log "Successfully exported QC thumbnails for project: $project_name"
         ((SUCCESSFUL_EXPORTS++))
         
-        # Upload to Google Drive if requested
-        if [ "$UPLOAD_TO_DRIVE" = true ] && [ -d "$project_output_dir" ]; then
+        # Step 2: Upload to Google Drive
+        if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
             log "Uploading QC thumbnails to Google Drive..."
-            if rclone copy "$project_output_dir" "gdrive:$DRIVE_FOLDER_ID/$project_name" --progress; then
-                log "Successfully uploaded QC thumbnails for project: $project_name"
+            
+            # Determine folder name
+            if [ -n "$CUSTOM_FOLDER_NAME" ]; then
+                drive_folder_name="${CUSTOM_FOLDER_NAME}_${project_name}"
             else
-                warn_log "Failed to upload QC thumbnails for project: $project_name"
+                drive_folder_name="QC_Thumbnails_${project_name}"
             fi
+            
+            # Upload using Python script
+            if python3 upload_qc_thumbnails_to_drive.py \
+                --qc_thumbnails_dir "$project_output_dir" \
+                --credentials_file "$CREDENTIALS_FILE" \
+                --token_file "$TOKEN_FILE" \
+                --folder_name "$drive_folder_name" \
+                >> "$LOG_FILE" 2>&1; then
+                log "Successfully uploaded QC thumbnails for project: $project_name"
+                ((SUCCESSFUL_UPLOADS++))
+            else
+                error_log "Failed to upload QC thumbnails for project: $project_name"
+                ((FAILED_UPLOADS++))
+            fi
+        else
+            warn_log "No thumbnail files found to upload for project: $project_name"
+            ((FAILED_UPLOADS++))
         fi
     else
         error_log "Failed to export QC thumbnails for project: $project_name"
         ((FAILED_EXPORTS++))
+        ((FAILED_UPLOADS++))
     fi
     
     echo
@@ -226,13 +259,17 @@ done
 echo -e "\033[1;32m===============================================\033[0m"
 echo -e "\033[1;32m           Pipeline Execution Complete         \033[0m"
 echo -e "\033[1;32m===============================================\033[0m"
-log "QC thumbnail export pipeline completed"
-log "Successfully processed: $SUCCESSFUL_EXPORTS projects"
-log "Failed to process: $FAILED_EXPORTS projects"
+log "QC thumbnail export and upload pipeline completed"
+log "Export Results:"
+log "  Successfully exported: $SUCCESSFUL_EXPORTS projects"
+log "  Failed to export: $FAILED_EXPORTS projects"
+log "Upload Results:"
+log "  Successfully uploaded: $SUCCESSFUL_UPLOADS projects"
+log "  Failed to upload: $FAILED_UPLOADS projects"
 log "Check $LOG_FILE for detailed logs"
 log "Check $ERROR_LOG for error logs"
 log "QuPath verbose output is in $QUPATH_LOG"
 
 if [ -d "$OUTPUT_DIR" ]; then
-    log "QC thumbnails available in: $(pwd)/$OUTPUT_DIR"
+    log "Local QC thumbnails available in: $(pwd)/$OUTPUT_DIR"
 fi 
