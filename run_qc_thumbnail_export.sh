@@ -23,6 +23,7 @@ show_help() {
     echo
     echo "Options:"
     echo "  -p, --project PATH     Path to QuPath project file (.qpproj)"
+    echo "  -r, --trident PATH     Path to TRIDENT output directory (containing contours_geojson/)"
     echo "  -o, --output DIR       Output directory for thumbnails (default: qc_thumbnails)"
     echo "  -c, --credentials FILE Path to Google Drive credentials file (default: drive_credentials.json)"
     echo "  -t, --token FILE       Path to token file (default: token.json)"
@@ -32,12 +33,13 @@ show_help() {
     echo "  -h, --help            Show this help message"
     echo
     echo "Examples:"
-    echo "  $0 -s                                    # Export QC thumbnails for test project"
-    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj  # Export for specific project"
-    echo "  $0 -a                                    # Export all projects and upload to Drive"
+    echo "  $0 -s -r /path/to/trident_output                       # Export QC for test project"
+    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -r /path/to/trident_output  # Export for specific project"
+    echo "  $0 -a -r /path/to/trident_output                       # Export all projects and upload to Drive"
     echo
     echo "Prerequisites:"
     echo "  - QuPath must be installed and QUPATH_PATH set correctly"
+    echo "  - TRIDENT output directory with contours_geojson/ subdirectory"
     echo "  - Google Drive credentials and token files must be available"
     echo "  - Python with required packages (google-api-python-client, etc.)"
     echo
@@ -51,7 +53,8 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_DIR="logs"
 LOG_FILE="${LOG_DIR}/qc_export_${TIMESTAMP}.log"
 ERROR_LOG="${LOG_DIR}/qc_export_${TIMESTAMP}_error.log"
-QUPATH_LOG="${LOG_DIR}/qupath_qc_${TIMESTAMP}.log"
+QUPATH_TRIDENT_LOG="${LOG_DIR}/qupath_trident_${TIMESTAMP}.log"
+QUPATH_QC_LOG="${LOG_DIR}/qupath_qc_${TIMESTAMP}.log"
 
 mkdir -p "$LOG_DIR"
 
@@ -74,6 +77,7 @@ warn_log() {
 # Command Line Argument Parsing
 # =============================================================================
 PROJECT_PATH=""
+TRIDENT_OUTPUT_PATH=""
 OUTPUT_DIR="qc_thumbnails"
 CREDENTIALS_FILE="drive_credentials.json"
 TOKEN_FILE="token.json"
@@ -85,6 +89,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--project)
             PROJECT_PATH="$2"
+            shift 2
+            ;;
+        -r|--trident)
+            TRIDENT_OUTPUT_PATH="$2"
             shift 2
             ;;
         -o|--output)
@@ -149,6 +157,31 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
+# Validate TRIDENT output path
+if [ -z "$TRIDENT_OUTPUT_PATH" ]; then
+    error_log "TRIDENT output path is required. Use -r option"
+    show_help
+fi
+
+if [ ! -d "$TRIDENT_OUTPUT_PATH" ]; then
+    error_log "TRIDENT output directory not found: $TRIDENT_OUTPUT_PATH"
+    exit 1
+fi
+
+if [ ! -d "$TRIDENT_OUTPUT_PATH/contours_geojson" ]; then
+    error_log "TRIDENT contours_geojson directory not found: $TRIDENT_OUTPUT_PATH/contours_geojson"
+    exit 1
+fi
+
+# Count GeoJSON files
+geojson_count=$(find "$TRIDENT_OUTPUT_PATH/contours_geojson" -name "*.geojson" -type f | wc -l)
+if [ "$geojson_count" -eq 0 ]; then
+    error_log "No GeoJSON files found in $TRIDENT_OUTPUT_PATH/contours_geojson"
+    exit 1
+fi
+
+log "Found $geojson_count TRIDENT GeoJSON files in $TRIDENT_OUTPUT_PATH/contours_geojson"
+
 # Determine projects to process
 PROJECTS_TO_PROCESS=()
 
@@ -207,45 +240,61 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Processing project: $project_name"
     log "Project file: $project"
     
-    # Step 1: Run QuPath export script
-    log "Exporting QC thumbnails with TRIDENT annotations..."
+    # Step 1: Import TRIDENT GeoJSON annotations
+    log "Importing TRIDENT GeoJSON annotations..."
     if "$QUPATH_PATH" script --project="$project" \
-                      --args="$project_output_dir" \
-                      THESIS_PANK/00b_export_annotated_thumbnails_qc.groovy \
-                      >> "$QUPATH_LOG" 2>&1; then
-        log "Successfully exported QC thumbnails for project: $project_name"
-        ((SUCCESSFUL_EXPORTS++))
+                      --args="$TRIDENT_OUTPUT_PATH" \
+                      THESIS_PANK/00a_import_trident_geojson.groovy \
+                      >> "$QUPATH_TRIDENT_LOG" 2>&1; then
+        log "Successfully imported TRIDENT GeoJSON for project: $project_name"
         
-        # Step 2: Upload to Google Drive
-        if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
-            log "Uploading QC thumbnails to Google Drive..."
+        # Allow QuPath to save changes
+        sleep 2
+        
+        # Step 2: Export QC thumbnails with TRIDENT annotations
+        log "Exporting QC thumbnails with TRIDENT annotations..."
+        if "$QUPATH_PATH" script --project="$project" \
+                          --args="$project_output_dir" \
+                          THESIS_PANK/00b_export_annotated_thumbnails_qc.groovy \
+                          >> "$QUPATH_QC_LOG" 2>&1; then
+            log "Successfully exported QC thumbnails for project: $project_name"
+            ((SUCCESSFUL_EXPORTS++))
             
-            # Determine folder name
-            if [ -n "$CUSTOM_FOLDER_NAME" ]; then
-                drive_folder_name="${CUSTOM_FOLDER_NAME}_${project_name}"
+            # Step 3: Upload to Google Drive
+            if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
+                log "Uploading QC thumbnails to Google Drive..."
+                
+                # Determine folder name
+                if [ -n "$CUSTOM_FOLDER_NAME" ]; then
+                    drive_folder_name="${CUSTOM_FOLDER_NAME}_${project_name}"
+                else
+                    drive_folder_name="QC_Thumbnails_${project_name}"
+                fi
+                
+                # Upload using Python script
+                if python3 THESIS_PANK/upload_qc_thumbnails_to_drive.py \
+                    --qc_thumbnails_dir "$project_output_dir" \
+                    --credentials_file "$CREDENTIALS_FILE" \
+                    --token_file "$TOKEN_FILE" \
+                    --folder_name "$drive_folder_name" \
+                    >> "$LOG_FILE" 2>&1; then
+                    log "Successfully uploaded QC thumbnails for project: $project_name"
+                    ((SUCCESSFUL_UPLOADS++))
+                else
+                    error_log "Failed to upload QC thumbnails for project: $project_name"
+                    ((FAILED_UPLOADS++))
+                fi
             else
-                drive_folder_name="QC_Thumbnails_${project_name}"
-            fi
-            
-            # Upload using Python script
-            if python3 THESIS_PANK/upload_qc_thumbnails_to_drive.py \
-                --qc_thumbnails_dir "$project_output_dir" \
-                --credentials_file "$CREDENTIALS_FILE" \
-                --token_file "$TOKEN_FILE" \
-                --folder_name "$drive_folder_name" \
-                >> "$LOG_FILE" 2>&1; then
-                log "Successfully uploaded QC thumbnails for project: $project_name"
-                ((SUCCESSFUL_UPLOADS++))
-            else
-                error_log "Failed to upload QC thumbnails for project: $project_name"
+                warn_log "No thumbnail files found to upload for project: $project_name"
                 ((FAILED_UPLOADS++))
             fi
         else
-            warn_log "No thumbnail files found to upload for project: $project_name"
+            error_log "Failed to export QC thumbnails for project: $project_name"
+            ((FAILED_EXPORTS++))
             ((FAILED_UPLOADS++))
         fi
     else
-        error_log "Failed to export QC thumbnails for project: $project_name"
+        error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
         ((FAILED_EXPORTS++))
         ((FAILED_UPLOADS++))
     fi
@@ -268,7 +317,8 @@ log "  Successfully uploaded: $SUCCESSFUL_UPLOADS projects"
 log "  Failed to upload: $FAILED_UPLOADS projects"
 log "Check $LOG_FILE for detailed logs"
 log "Check $ERROR_LOG for error logs"
-log "QuPath verbose output is in $QUPATH_LOG"
+log "QuPath TRIDENT import output is in $QUPATH_TRIDENT_LOG"
+log "QuPath QC export output is in $QUPATH_QC_LOG"
 
 if [ -d "$OUTPUT_DIR" ]; then
     log "Local QC thumbnails available in: $(pwd)/$OUTPUT_DIR"

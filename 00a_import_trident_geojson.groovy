@@ -4,7 +4,7 @@ import qupath.lib.common.GeneralTools
 import qupath.lib.io.PathIO
 import qupath.lib.objects.PathObject
 import qupath.lib.objects.classes.PathClassFactory
-import qupath.lib.scripting. इसको_qupathContext // QuPath
+import qupath.lib.scripting.QP // QuPath
 import java.awt.Color
 
 // Script to import TRIDENT-generated GeoJSON tissue segmentations into QuPath
