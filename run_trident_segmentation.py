@@ -51,16 +51,13 @@ def run_trident_for_slide(trident_script_path, slide_path, slide_job_dir):
         if process.returncode == 0:
             logger.info(f"TRIDENT executed successfully for {slide_path.name}.")
             if stdout:
-                logger.debug(f"TRIDENT stdout:
-{stdout}")
+                logger.debug(f"TRIDENT stdout:\n{stdout}")
         else:
             logger.error(f"TRIDENT execution failed for {slide_path.name} with exit code {process.returncode}.")
             if stdout:
-                logger.error(f"TRIDENT stdout:
-{stdout}")
+                logger.error(f"TRIDENT stdout:\n{stdout}")
             if stderr:
-                logger.error(f"TRIDENT stderr:
-{stderr}")
+                logger.error(f"TRIDENT stderr:\n{stderr}")
         return process.returncode
     except FileNotFoundError:
         logger.error(f"Error: The Python interpreter or TRIDENT script was not found. Ensure Python is in PATH and script path is correct.")
