@@ -8,6 +8,7 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 .
 ├── 00_create_project.groovy
 ├── 00a_import_trident_geojson.groovy
+├── 00b_export_annotated_thumbnails_qc.groovy
 ├── 01_he_stardist_cell_segmentation_shell_compatible.groovy
 ├── 02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy
 ├── 03_uni2_feature_extraction_NEW2.py
@@ -15,7 +16,9 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ├── run_trident_segmentation.py
 ├── generate_drive_token.py
 ├── upload_contours_to_drive.py
+├── upload_qc_thumbnails_to_drive.py
 ├── run_import_trident_geojson.sh
+├── run_qc_thumbnail_export.sh
 ├── run_pipeline_01_02.sh
 ├── run_pipeline_03.sh
 └── logs/
@@ -245,6 +248,103 @@ chmod +x run_import_trident_geojson.sh
 3. Process all projects: `./run_import_trident_geojson.sh -t ./trident_output/contours_geoJSON -a`
 
 The script creates detailed logs in the `logs/` directory for tracking progress and debugging.
+
+### Quality Control Workflow for TRIDENT Annotations
+
+After importing TRIDENT annotations into QuPath, you can run a comprehensive QC workflow that exports annotated thumbnails and uploads them to Google Drive for visual validation.
+
+#### Features
+- **Automated thumbnail export** with TRIDENT annotation overlays (green contours)
+- **Batch processing** across multiple QuPath projects  
+- **Google Drive integration** for collaborative review
+- **Comprehensive logging** with detailed progress tracking
+- **Duplicate prevention** and error handling
+- **Visual quality assessment** with annotation summary reports
+
+#### Prerequisites
+1. **Google Drive API Setup** (same as TRIDENT QC workflow):
+   ```bash
+   python generate_drive_token.py --credentials_file drive_credentials.json
+   ```
+
+2. **TRIDENT annotations imported** into QuPath projects using `00a_import_trident_geojson.groovy`
+
+#### Usage
+
+##### Test Mode (5-image project)
+```bash
+./run_qc_thumbnail_export.sh -s -r /path/to/trident_output
+```
+
+##### Single Project
+```bash
+./run_qc_thumbnail_export.sh \
+    -p /path/to/project.qpproj \
+    -r /path/to/trident_output \
+    -o ./qc_thumbnails \
+    -f "ProjectName_QC_Thumbnails"
+```
+
+##### All Projects
+```bash
+./run_qc_thumbnail_export.sh \
+    -a \
+    -r /path/to/trident_output \
+    -c ./drive_credentials.json \
+    -t ./token.json
+```
+
+#### Script Options
+- `-s, --test`: Process test project only (QuPath_MP_PDAC5)
+- `-a, --all`: Process all QuPath projects in current directory  
+- `-p, --project`: Process specific project file
+- `-r, --trident`: **Required** - Path to TRIDENT output directory
+- `-o, --output`: Output directory for thumbnails (default: qc_thumbnails)
+- `-c, --credentials`: Google Drive credentials file (default: drive_credentials.json)
+- `-t, --token`: Token file (default: token.json)
+- `-f, --folder`: Google Drive folder name (default: auto-generated)
+
+#### Workflow Steps
+1. **TRIDENT Import**: Automatically imports GeoJSON annotations into QuPath
+2. **Thumbnail Export**: Exports 2048px thumbnails with green TRIDENT overlays
+3. **Drive Upload**: Uploads thumbnails to organized Google Drive folders
+4. **QC Summary**: Generates detailed reports with annotation statistics
+
+#### Output Structure
+```
+qc_thumbnails/
+├── ProjectName/
+│   ├── QC_Summary_YYYYMMDD_HHMMSS.txt
+│   ├── image1_qc_thumbnail.jpg
+│   ├── image2_qc_thumbnail.jpg
+│   └── ...
+└── logs/
+    ├── qc_workflow_YYYYMMDD_HHMMSS.log
+    ├── qupath_trident_YYYYMMDD_HHMMSS.log
+    └── qupath_qc_YYYYMMDD_HHMMSS.log
+```
+
+#### QC Summary Report
+Each project generates a summary showing:
+- **Total images processed**
+- **Images with TRIDENT annotations** vs. **no annotations found**
+- **Individual image status** with warning indicators
+- **Processing statistics** and error counts
+
+#### Google Drive Organization
+Uploads are organized in folders:
+- `ProjectName_QC_Thumbnails_YYYYMMDD/`
+  - Individual thumbnail images
+  - QC summary report
+  - Timestamp-based organization
+
+#### Troubleshooting
+- **"No TRIDENT annotations found"**: Ensure TRIDENT import completed successfully
+- **"TRIDENT directory not found"**: Verify the `-r` path points to your TRIDENT output directory
+- **Google Drive errors**: Check credentials and token files are valid
+- **QuPath script errors**: Review the separate log files in `logs/` directory
+
+This QC workflow enables efficient visual validation of TRIDENT tissue segmentations across large datasets before proceeding with the main analysis pipeline.
 
 ### Step 1 & 2: Running Cell Segmentation and Tile Extraction (QuPath pipeline)
 
