@@ -13,6 +13,8 @@ This repository contains a comprehensive pipeline for cell analysis in H&E stain
 ├── 03_uni2_feature_extraction_NEW2.py
 ├── 04_05_umap_3d_kmeans30.py
 ├── run_trident_segmentation.py
+├── generate_drive_token.py
+├── upload_contours_to_drive.py
 ├── run_pipeline_01_02.sh
 ├── run_pipeline_03.sh
 └── logs/
@@ -48,23 +50,56 @@ The script includes a `pyramidalizeImages` flag (default: `true`) that determine
 
 ## Pipeline Components
 
-### 0. TRIDENT Tissue Segmentation (New Preliminary Step)
-- Uses the [TRIDENT toolkit](https://github.com/mahmoodlab/TRIDENT) for initial tissue segmentation on whole-slide images.
-- This step is performed by a standalone Python script (`run_trident_segmentation.py`) that processes a directory of images.
-- TRIDENT's `run_single_slide.py` is called for each image with the `--task segment` argument.
-- Output: GeoJSON files containing tissue polygons, saved in a structured output directory:
-  `<trident_base_output_dir>/<slide_name_without_extension>/segmentations/<slide_name_without_extension>.geojson`.
-- These GeoJSON files are then imported into the QuPath project using the `00a_import_trident_geojson.groovy` script.
+### 0. TRIDENT Tissue Segmentation
+Uses the [TRIDENT toolkit](https://github.com/mahmoodlab/TRIDENT) for initial tissue segmentation on whole-slide images.
 
-#### TRIDENT Prerequisites:
-- **Python Environment:** Python 3.8+ is recommended.
-- **TRIDENT Toolkit Installation:** 
-    1. Clone the TRIDENT repository: `git clone https://github.com/mahmoodlab/TRIDENT.git`
-    2. Navigate into the cloned directory: `cd TRIDENT`
-    3. Install TRIDENT and its dependencies (preferably in a virtual environment): `pip install -e .`
-    This will install PyTorch and other necessary libraries. The `run_single_slide.py` script will be in the root of this cloned TRIDENT directory.
-- **CUDA-Enabled GPU:** While TRIDENT (via PyTorch) might technically run on a CPU, a CUDA-enabled NVIDIA GPU is **highly recommended** for acceptable performance. Processing whole-slide images for segmentation is computationally intensive and will be extremely slow on a CPU.
-- **Model Dependencies:** Specific TRIDENT models might have additional dependencies. TRIDENT typically notifies you if these are missing.
+#### Features
+- Automated batch processing of whole-slide images
+- Hole removal in segmentation results (`--remove_holes` option)
+- Support for multiple image formats (`.svs`, `.ndpi`, `.tiff`, etc.)
+- GPU acceleration support
+- Quality control visualization outputs
+
+#### Usage
+```bash
+python run_trident_segmentation.py \
+    --image_dir /path/to/slides \
+    --trident_output_dir ./trident_output \
+    --trident_script_path /path/to/trident/run_batch_of_slides.py \
+    --gpu 0
+```
+
+### Quality Control with Google Drive Integration
+
+The pipeline includes tools for uploading segmentation results to Google Drive for quality control review.
+
+#### Setup Google Drive Authentication
+1. Create credentials:
+   - Go to Google Cloud Console
+   - Create a new project or select existing one
+   - Enable Google Drive API
+   - Create OAuth 2.0 credentials
+   - Download credentials as `drive_credentials.json`
+
+2. Generate authentication token:
+```bash
+python generate_drive_token.py --credentials_file drive_credentials.json
+```
+This will create a `token.json` file after browser authentication.
+
+3. Upload contour visualizations:
+```bash
+python upload_contours_to_drive.py \
+    --trident_output_dir ./trident_output \
+    --credentials_file ./drive_credentials.json \
+    --token_file ./token.json \
+    --folder_name "PDAC5_QC_Contours"
+```
+
+#### Security Notes
+- Credential files (`drive_credentials.json`, `token.json`) are automatically excluded from git
+- Token refresh is handled automatically
+- Only requested scopes are used (file creation and upload)
 
 ### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
 - Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions** (annotations with class "Tissue (TRIDENT)").
