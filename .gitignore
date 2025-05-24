@@ -55,4 +55,23 @@ Thumbs.db
 # Google Drive Authentication
 token.json
 *credentials*.json
-drive_credentials.json 
+drive_credentials.json
+
+# Output directories (contain generated files, images, features, etc.)
+output/
+qc_thumbnails/
+logs/
+*.csv
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+
+# TRIDENT output
+trident_output/
+
+# Feature extraction outputs
+*embeddings*.csv
+features.csv
+umap_results.csv 
