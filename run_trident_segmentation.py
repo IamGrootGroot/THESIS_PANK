@@ -36,7 +36,6 @@ def run_trident_for_slide(trident_script_path, slide_path, slide_job_dir):
     command = [
         "python",
         trident_script_path,
-        "--task", "segment",
         "--slide_path", str(slide_path),
         "--job_dir", str(slide_job_dir)
     ]
