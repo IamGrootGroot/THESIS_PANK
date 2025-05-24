@@ -38,7 +38,7 @@ ENABLE_PARALLEL_PROCESSING = true  // Enable parallel tile processing
  * @return Map containing parsed arguments
  */
 def parseArguments() {
-    def args = getArguments()  // Use getArguments() instead of args
+    def args = binding.getVariable("args")
     if (!args) {
         println "Error: No arguments provided"
         return null
