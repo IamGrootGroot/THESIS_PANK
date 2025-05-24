@@ -38,7 +38,7 @@ ENABLE_PARALLEL_PROCESSING = true  // Enable parallel tile processing
  * @return Map containing parsed arguments
  */
 def parseArguments() {
-    def args = args
+    def args = getArguments()  // Use getArguments() instead of args
     if (!args) {
         println "Error: No arguments provided"
         return null
@@ -53,6 +53,7 @@ def parseArguments() {
         return null
     }
     
+    println "Using model path: ${modelPath}"  // Debug output
     return [modelPath: modelPath, useGpu: useGpu, deviceId: deviceId]
 }
 

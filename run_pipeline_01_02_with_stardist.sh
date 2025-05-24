@@ -8,11 +8,11 @@ QUPATH_CLASSPATH="$STARDIST_JAR:/u/trinhvq/Documents/maxencepelloux/qupath_gpu_b
 MODEL_PATH=$(realpath "$2")
 
 # Your original pipeline logic, but using java -cp instead of $QUPATH_PATH
-# Fixed argument format: properly separated arguments with quotes
+# Pass model path as a raw argument
 java -cp "$QUPATH_CLASSPATH" qupath.QuPath script \
   --project="$1" \
-  --args="${MODEL_PATH}" \
-  01_he_stardist_cell_segmentation_shell_compatible.groovy
+  01_he_stardist_cell_segmentation_shell_compatible.groovy \
+  "$MODEL_PATH"
 
 echo "Waiting for project save..."
 sleep 5
