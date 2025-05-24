@@ -56,9 +56,9 @@ project.getImageList().eachWithIndex { entry, index ->
     if (geojsonFile.exists() && geojsonFile.isFile()) {
         println "  Found corresponding GeoJSON: ${geojsonFile.getAbsolutePath()}"
         try {
-            // Import GeoJSON objects
-            // PathIO.importGeoJSON returns a Collection<PathObject>
-            Collection<PathObject> importedObjects = PathIO.importGeoJSON(geojsonFile.toPath())
+            // Import GeoJSON objects using the correct PathIO method
+            // PathIO.readObjectsFromGeoJSON expects an InputStream, so we'll use importObjectsFromFile instead
+            List<PathObject> importedObjects = PathIO.readObjects(geojsonFile.toPath())
             
             if (importedObjects.isEmpty()) {
                 println "  Warning: GeoJSON file ${geojsonFile.getName()} was empty or contained no valid QuPath objects."
