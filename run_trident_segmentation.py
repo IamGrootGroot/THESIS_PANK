@@ -38,8 +38,7 @@ def run_trident_batch_segmentation(trident_script_path, image_dir, output_dir, g
         "--wsi_dir", str(image_dir),
         "--job_dir", str(output_dir),
         "--gpu", str(gpu),
-        "--remove_holes",
-        "--segmenter", "grandqc"
+        "--remove_holes"
     ]
 
     logger.info(f"Executing TRIDENT batch segmentation: {' '.join(command)}")
