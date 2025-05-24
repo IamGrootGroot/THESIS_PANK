@@ -11,7 +11,7 @@ MODEL_PATH=$(realpath "$2")
 # Fixed argument format: properly separated arguments with quotes
 java -cp "$QUPATH_CLASSPATH" qupath.QuPath script \
   --project="$1" \
-  --args="modelPath='${MODEL_PATH}'" \
+  --args="${MODEL_PATH}" \
   01_he_stardist_cell_segmentation_shell_compatible.groovy
 
 echo "Waiting for project save..."

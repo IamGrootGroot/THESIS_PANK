@@ -44,23 +44,9 @@ def parseArguments() {
         return null
     }
     
-    def modelPath = null
+    def modelPath = args[0]  // First argument is the model path
     def useGpu = USE_GPU
     def deviceId = GPU_DEVICE_ID
-    
-    args.each { arg ->
-        if (arg.startsWith("modelPath=")) {
-            // Extract path and remove any surrounding quotes
-            modelPath = arg.substring(10)
-            if (modelPath.startsWith("'") && modelPath.endsWith("'")) {
-                modelPath = modelPath[1..-2]  // Remove first and last character if they are quotes
-            }
-        } else if (arg.startsWith("gpu=")) {
-            useGpu = Boolean.parseBoolean(arg.substring(4))
-        } else if (arg.startsWith("device=")) {
-            deviceId = Integer.parseInt(arg.substring(7))
-        }
-    }
     
     if (!modelPath) {
         println "Error: Model path not provided"
