@@ -4,7 +4,7 @@
  *
  * This script is part of the PANK thesis project and implements the first step
  * of the cell segmentation pipeline using StarDist2D for H&E stained images.
- * Optimized for GPU acceleration on CUDA-compatible hardware.
+ * Optimized for A6000 GPU acceleration.
  */
 
 import qupath.lib.objects.classes.PathClass
@@ -16,23 +16,23 @@ import qupath.lib.roi.ROIs
 import qupath.lib.objects.PathObjects
 import qupath.lib.regions.ImagePlane
 
-// Configuration parameters for StarDist2D cell segmentation (GPU-optimized)
+// Configuration parameters for StarDist2D cell segmentation (A6000 optimized)
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 8192  // Conservative for GPU stability
+MAX_IMAGE_DIMENSION = 16384  // Increased for A6000
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 1024  // Very small tiles for GPU safety
-OVERLAP = 64  // Minimal overlap
-BATCH_SIZE = 16  // Very small batch size for GPU stability
-TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
-NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
-MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"  // Correct absolute path
+TILE_SIZE = 2048  // Increased for A6000
+OVERLAP = 128  // Increased for A6000
+BATCH_SIZE = 64  // Increased for A6000
+TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)"
+NUCLEUS_CLASS_NAME = "Nucleus"
+MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 
-// GPU Configuration - very conservative but enabled
+// GPU Configuration - optimized for A6000
 USE_GPU = true
-GPU_DEVICE_ID = 0  // Use first GPU (A6000)
-ENABLE_PARALLEL_PROCESSING = true  // Keep disabled to avoid threading issues
+GPU_DEVICE_ID = 0
+ENABLE_PARALLEL_PROCESSING = true  // Enabled for A6000
 
 /**
  * Parse command line arguments
@@ -93,7 +93,7 @@ def checkGpuAvailability() {
 }
 
 /**
- * Creates and configures the StarDist2D model with GPU optimization
+ * Creates and configures the StarDist2D model with A6000 optimization
  * @param modelPath Path to the model file
  * @param useGpu Whether to use GPU acceleration
  * @param deviceId GPU device ID to use
@@ -135,7 +135,7 @@ def createStarDistModel(String modelPath, boolean useGpu, int deviceId) {
             print "Using deprecated preprocess method as fallback"
         }
         
-        // Add GPU-specific configurations with conservative approach
+        // Add GPU-specific configurations
         if (useGpu) {
             print "Attempting to enable GPU acceleration..."
             try {
@@ -148,21 +148,21 @@ def createStarDistModel(String modelPath, boolean useGpu, int deviceId) {
                     print "GPU device set via device() method"
                 }
                 
-                // Only enable parallel processing if explicitly requested and stable
+                // Enable parallel processing for A6000
                 if (ENABLE_PARALLEL_PROCESSING && builder.hasProperty('parallelProcessing')) {
                     builder = builder.parallelProcessing(true)
                     print "Parallel processing enabled"
                 } else {
-                    print "Parallel processing disabled for stability"
+                    print "Parallel processing disabled"
                 }
                 
-                // Set conservative batch size
+                // Set batch size for A6000
                 if (builder.hasProperty('batchSize')) {
                     builder = builder.batchSize(BATCH_SIZE)
                     print "Batch size set to: ${BATCH_SIZE}"
                 }
                 
-                // Set tile overlap for better edge handling
+                // Set tile overlap
                 if (builder.hasProperty('overlap')) {
                     builder = builder.overlap(OVERLAP)
                     print "Tile overlap set to: ${OVERLAP}"
@@ -217,7 +217,7 @@ def saveImageData(imageData) {
  * Main execution function for cell detection
  */
 def runCellDetection() {
-    print "=== StarDist2D Cell Detection with GPU Acceleration ==="
+    print "=== StarDist2D Cell Detection with A6000 Optimization ==="
     
     // Parse command line arguments
     def args = parseArguments()
@@ -278,7 +278,7 @@ def runCellDetection() {
     print "Total tissue area: ${(totalTissueArea / 1000000).round(2)} mm²"
 
     try {
-        // Create StarDist model with GPU optimization
+        // Create StarDist model with A6000 optimization
         def startTime = System.currentTimeMillis()
         def stardist = createStarDistModel(args.modelPath, args.useGpu, args.deviceId)
         def modelLoadTime = System.currentTimeMillis() - startTime
