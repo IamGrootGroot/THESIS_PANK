@@ -20,20 +20,19 @@ import qupath.lib.regions.ImagePlane
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 4096  // Reduced for stability
+MAX_IMAGE_DIMENSION = 8192  // Conservative for GPU stability
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 1024  // Reduced for memory safety
-OVERLAP = 64  // Reduced overlap
-BATCH_SIZE = 8  // Much smaller batch size for stability
+TILE_SIZE = 1024  // Very small tiles for GPU safety
+OVERLAP = 64  // Minimal overlap
+BATCH_SIZE = 16  // Very small batch size for GPU stability
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
 NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
 MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"  // Correct absolute path
 
-// GPU Configuration - more conservative
-// Set USE_GPU to false if you experience crashes
-USE_GPU = false  // Temporarily disable GPU to avoid crashes
+// GPU Configuration - very conservative but enabled
+USE_GPU = true
 GPU_DEVICE_ID = 0  // Use first GPU (A6000)
-ENABLE_PARALLEL_PROCESSING = false  // Disable to avoid threading issues
+ENABLE_PARALLEL_PROCESSING = true  // Keep disabled to avoid threading issues
 
 /**
  * Parse command line arguments
