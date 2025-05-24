@@ -125,9 +125,10 @@ project.getImageList().eachWithIndex { entry, index ->
                 if (roi != null) {
                     // Convert ROI coordinates to thumbnail coordinates
                     def shape = roi.getShape()
-                    def scaledShape = new java.awt.geom.AffineTransform.getScaleInstance(
+                    def transform = java.awt.geom.AffineTransform.getScaleInstance(
                         1.0/downsample, 1.0/downsample
-                    ).createTransformedShape(shape)
+                    )
+                    def scaledShape = transform.createTransformedShape(shape)
                     
                     g2d.draw(scaledShape)
                 }
