@@ -49,9 +49,9 @@ project.getImageList().eachWithIndex { entry, index ->
     
     println "Processing QuPath image (${index + 1}/${project.getImageList().size()}): ${imageNameWithExtension} (stripped: ${imageNameNoExt})"
 
-    // Construct the expected path to the GeoJSON file based on TRIDENT's output structure
-    def imageSpecificTridentJobDir = new File(tridentBaseOutputDir, imageNameNoExt)
-    def geojsonFile = new File(imageSpecificTridentJobDir, "segmentations" + File.separator + imageNameNoExt + ".geojson")
+    // Construct the expected path to the GeoJSON file based on TRIDENT's actual output structure
+    // TRIDENT outputs files directly in: trident_output/contours_geojson/<image_name>.geojson
+    def geojsonFile = new File(tridentBaseOutputDir, "contours_geojson" + File.separator + imageNameNoExt + ".geojson")
 
     if (geojsonFile.exists() && geojsonFile.isFile()) {
         println "  Found corresponding GeoJSON: ${geojsonFile.getAbsolutePath()}"
