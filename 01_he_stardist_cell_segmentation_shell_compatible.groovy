@@ -20,19 +20,20 @@ import qupath.lib.regions.ImagePlane
 PIXEL_SIZE = 0.23  // microns per pixel
 DETECTION_THRESHOLD = 0.25
 CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 8192  // Increased for GPU processing
+MAX_IMAGE_DIMENSION = 4096  // Reduced for stability
 NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 4096  // Optimal for A6000 memory
-OVERLAP = 128  // Overlap between tiles to avoid edge artifacts
-BATCH_SIZE = 32  // Process multiple tiles in parallel on GPU
+TILE_SIZE = 1024  // Reduced for memory safety
+OVERLAP = 64  // Reduced overlap
+BATCH_SIZE = 8  // Much smaller batch size for stability
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
 NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
 MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"  // Correct absolute path
 
-// GPU Configuration
-USE_GPU = true  // Enable GPU acceleration
+// GPU Configuration - more conservative
+// Set USE_GPU to false if you experience crashes
+USE_GPU = false  // Temporarily disable GPU to avoid crashes
 GPU_DEVICE_ID = 0  // Use first GPU (A6000)
-ENABLE_PARALLEL_PROCESSING = true  // Enable parallel tile processing
+ENABLE_PARALLEL_PROCESSING = false  // Disable to avoid threading issues
 
 /**
  * Parse command line arguments
@@ -105,64 +106,89 @@ def createStarDistModel(String modelPath, boolean useGpu, int deviceId) {
     print "GPU acceleration: ${useGpu}"
     print "Device ID: ${deviceId}"
     
-    def builder = StarDist2D.builder(modelPath)
-        .threshold(DETECTION_THRESHOLD)
-        .pixelSize(PIXEL_SIZE)
-        .cellExpansion(CELL_EXPANSION)
-        .tileSize(TILE_SIZE)
-        .measureShape()
-        .measureIntensity()
-        .classify(PathClass.fromString(NUCLEUS_CLASS_NAME))
-        .preprocess(
-            StarDist2D.imageNormalizationBuilder()
-                .maxDimension(MAX_IMAGE_DIMENSION)
-                .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
-                .build()
-        )
-    
-    // Add GPU-specific configurations
-    if (useGpu) {
+    try {
+        def builder = StarDist2D.builder(modelPath)
+            .threshold(DETECTION_THRESHOLD)
+            .pixelSize(PIXEL_SIZE)
+            .cellExpansion(CELL_EXPANSION)
+            .tileSize(TILE_SIZE)
+            .measureShape()
+            .measureIntensity()
+            .classify(PathClass.fromString(NUCLEUS_CLASS_NAME))
+        
+        // Use the newer preprocessGlobal method instead of deprecated preprocess
         try {
-            print "Enabling GPU acceleration..."
-            // These methods may vary depending on QuPath/StarDist version
-            // Try different approaches for GPU configuration
-            if (builder.hasProperty('useGPU')) {
-                builder = builder.useGPU(true)
-                print "GPU acceleration enabled via useGPU()"
-            } else if (builder.hasProperty('device')) {
-                builder = builder.device("GPU:${deviceId}")
-                print "GPU device set via device() method"
-            }
-            
-            // Enable parallel processing if available
-            if (ENABLE_PARALLEL_PROCESSING && builder.hasProperty('parallelProcessing')) {
-                builder = builder.parallelProcessing(true)
-                print "Parallel processing enabled"
-            }
-            
-            // Optimize batch size for GPU
-            if (builder.hasProperty('batchSize')) {
-                builder = builder.batchSize(BATCH_SIZE)
-                print "Batch size set to: ${BATCH_SIZE}"
-            }
-            
-            // Set tile overlap for better edge handling
-            if (builder.hasProperty('overlap')) {
-                builder = builder.overlap(OVERLAP)
-                print "Tile overlap set to: ${OVERLAP}"
-            }
-            
+            builder = builder.preprocessGlobal(
+                StarDist2D.imageNormalizationBuilder()
+                    .maxDimension(MAX_IMAGE_DIMENSION)
+                    .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
+                    .build()
+            )
+            print "Using preprocessGlobal method"
         } catch (Exception e) {
-            print "Warning: Could not configure GPU acceleration: ${e.getMessage()}"
-            print "Falling back to CPU processing"
+            // Fallback to deprecated method if newer one is not available
+            builder = builder.preprocess(
+                StarDist2D.imageNormalizationBuilder()
+                    .maxDimension(MAX_IMAGE_DIMENSION)
+                    .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
+                    .build()
+            )
+            print "Using deprecated preprocess method as fallback"
         }
-    } else {
-        print "Using CPU processing"
+        
+        // Add GPU-specific configurations with conservative approach
+        if (useGpu) {
+            print "Attempting to enable GPU acceleration..."
+            try {
+                // Try different approaches for GPU configuration
+                if (builder.hasProperty('useGPU')) {
+                    builder = builder.useGPU(true)
+                    print "GPU acceleration enabled via useGPU()"
+                } else if (builder.hasProperty('device')) {
+                    builder = builder.device("GPU:${deviceId}")
+                    print "GPU device set via device() method"
+                }
+                
+                // Only enable parallel processing if explicitly requested and stable
+                if (ENABLE_PARALLEL_PROCESSING && builder.hasProperty('parallelProcessing')) {
+                    builder = builder.parallelProcessing(true)
+                    print "Parallel processing enabled"
+                } else {
+                    print "Parallel processing disabled for stability"
+                }
+                
+                // Set conservative batch size
+                if (builder.hasProperty('batchSize')) {
+                    builder = builder.batchSize(BATCH_SIZE)
+                    print "Batch size set to: ${BATCH_SIZE}"
+                }
+                
+                // Set tile overlap for better edge handling
+                if (builder.hasProperty('overlap')) {
+                    builder = builder.overlap(OVERLAP)
+                    print "Tile overlap set to: ${OVERLAP}"
+                }
+                
+            } catch (Exception e) {
+                print "Warning: Could not configure GPU acceleration: ${e.getMessage()}"
+                print "Falling back to CPU processing"
+                useGpu = false
+            }
+        }
+        
+        if (!useGpu) {
+            print "Using CPU processing"
+        }
+        
+        def model = builder.build()
+        print "StarDist2D model configured successfully"
+        return model
+        
+    } catch (Exception e) {
+        print "Error creating StarDist model: ${e.getMessage()}"
+        e.printStackTrace()
+        throw e
     }
-    
-    def model = builder.build()
-    print "StarDist2D model configured successfully"
-    return model
 }
 
 /**
