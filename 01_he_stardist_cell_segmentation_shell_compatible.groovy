@@ -50,8 +50,11 @@ def parseArguments() {
     
     args.each { arg ->
         if (arg.startsWith("modelPath=")) {
-            // Remove quotes if present and get the actual path
-            modelPath = arg.substring(10).replaceAll("^'|'$", "")
+            // Extract path and remove any surrounding quotes
+            modelPath = arg.substring(10)
+            if (modelPath.startsWith("'") && modelPath.endsWith("'")) {
+                modelPath = modelPath[1..-2]  // Remove first and last character if they are quotes
+            }
         } else if (arg.startsWith("gpu=")) {
             useGpu = Boolean.parseBoolean(arg.substring(4))
         } else if (arg.startsWith("device=")) {
