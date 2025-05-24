@@ -22,7 +22,7 @@ import qupath.lib.images.servers.ImageServerProvider
 // Declare at script level (not inside a class definition or method)
 PATCH_SIZE = 224        // Size of the patches in pixels
 MAGNIFICATION = 20.0    // Target magnification for the patches
-OUTPUT_DIR = "/Users/maxencepelloux/PYTHON_Projects/THESIS_PANK/output/tiles"  // Base output directory
+OUTPUT_DIR = "output/tiles"  // Base output directory (relative to current working directory)
 
 /**
  * Parse command line arguments
