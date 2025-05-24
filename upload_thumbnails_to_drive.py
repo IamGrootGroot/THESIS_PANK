@@ -4,56 +4,69 @@ Upload TRIDENT Thumbnails to Google Drive Script
 
 This script collects visualization outputs from TRIDENT processing
 and uploads them to a Google Drive folder for quality control.
-
-You don't really need to use it if you're using this pipeline locally.
+It uses a pre-generated token file for authentication.
 """
 
 import os
 import argparse
 import logging
 from pathlib import Path
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 # Google Drive API scope
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-def authenticate_google_drive(credentials_file):
+def authenticate_google_drive(credentials_file, token_file):
     """
-    Authenticate with Google Drive API using credentials file.
+    Authenticate with Google Drive API using credentials and token files.
     """
     creds = None
-    token_file = 'token.json'
     
     # Load existing token
     if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
-    
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open(token_file, 'w') as token:
-            token.write(creds.to_json())
-    
-    return build('drive', 'v3', credentials=creds)
+        try:
+            creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+        except Exception as e:
+            logger.error(f"Error loading token file: {e}")
+            return None
 
-def create_drive_folder(service, folder_name, parent_folder_id=None):
+    # If token is invalid or expired, try to refresh it
+    if creds and not creds.valid:
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                # Save the refreshed credentials
+                with open(token_file, 'w') as token:
+                    token.write(creds.to_json())
+            except Exception as e:
+                logger.error(f"Error refreshing token: {e}")
+                return None
+        else:
+            logger.error("Token is invalid and cannot be refreshed. Please generate a new token using generate_drive_token.py")
+            return None
+
+    if not creds:
+        logger.error(f"No valid credentials found. Please run generate_drive_token.py first.")
+        return None
+
+    try:
+        service = build('drive', 'v3', credentials=creds)
+        return service
+    except Exception as e:
+        logger.error(f"Error building Drive service: {e}")
+        return None
+
+def create_drive_folder(service, folder_name):
     """
     Create a folder in Google Drive and return its ID.
     """
@@ -62,35 +75,13 @@ def create_drive_folder(service, folder_name, parent_folder_id=None):
         'mimeType': 'application/vnd.google-apps.folder'
     }
     
-    if parent_folder_id:
-        file_metadata['parents'] = [parent_folder_id]
-    
-    folder = service.files().create(body=file_metadata, fields='id').execute()
-    logger.info(f"Created folder '{folder_name}' with ID: {folder.get('id')}")
-    return folder.get('id')
-
-def upload_file_to_drive(service, file_path, folder_id=None):
-    """
-    Upload a file to Google Drive.
-    """
-    file_name = Path(file_path).name
-    file_metadata = {'name': file_name}
-    
-    if folder_id:
-        file_metadata['parents'] = [folder_id]
-    
-    media = MediaFileUpload(file_path, resumable=True)
-    
     try:
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
-        logger.info(f"Uploaded '{file_name}' with ID: {file.get('id')}")
-        return file.get('id')
+        folder = service.files().create(body=file_metadata, fields='id').execute()
+        folder_id = folder.get('id')
+        logger.info(f"Created folder '{folder_name}' with ID: {folder_id}")
+        return folder_id
     except Exception as e:
-        logger.error(f"Failed to upload '{file_name}': {e}")
+        logger.error(f"Error creating folder: {e}")
         return None
 
 def find_visualization_files(trident_output_dir):
@@ -100,41 +91,66 @@ def find_visualization_files(trident_output_dir):
     trident_path = Path(trident_output_dir)
     visualization_files = []
     
-    # Look for thumbnails in the thumbnails directory (TRIDENT structure)
+    # Look for thumbnails in the thumbnails directory
     thumbnails_dir = trident_path / "thumbnails"
     if thumbnails_dir.exists():
-        for img_file in thumbnails_dir.glob("*.jpg"):
-            visualization_files.append(img_file)
-        for img_file in thumbnails_dir.glob("*.jpeg"):
-            visualization_files.append(img_file)
-        for img_file in thumbnails_dir.glob("*.png"):
-            visualization_files.append(img_file)
+        for ext in ['.jpg', '.jpeg', '.png']:
+            visualization_files.extend(thumbnails_dir.glob(f"*{ext}"))
     
-    # Also look for visualization directories and files (fallback)
+    # Also look for visualization directories and files
     for item in trident_path.rglob("*"):
         if item.is_file() and item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
-            # Check if it's in a visualization directory or has visualization in name
             if 'visualization' in str(item) or 'thumbnail' in item.name.lower():
                 if item not in visualization_files:
                     visualization_files.append(item)
     
     return visualization_files
 
+def upload_file_to_drive(service, file_path, folder_id):
+    """
+    Upload a file to Google Drive.
+    """
+    file_name = Path(file_path).name
+    file_metadata = {
+        'name': file_name,
+        'parents': [folder_id]
+    }
+    
+    try:
+        media = MediaFileUpload(
+            str(file_path),
+            mimetype='image/jpeg' if file_path.suffix.lower() in ['.jpg', '.jpeg'] else 'image/png',
+            resumable=True
+        )
+        
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        
+        logger.info(f"Uploaded '{file_name}' with ID: {file.get('id')}")
+        return file.get('id')
+    except Exception as e:
+        logger.error(f"Failed to upload '{file_name}': {e}")
+        return None
+
 def main():
     parser = argparse.ArgumentParser(description="Upload TRIDENT visualization outputs to Google Drive.")
     parser.add_argument("--trident_output_dir", type=str, required=True,
-                        help="Directory containing TRIDENT output with visualization files.")
+                      help="Directory containing TRIDENT output with visualization files.")
     parser.add_argument("--credentials_file", type=str, required=True,
-                        help="Path to Google Drive API credentials JSON file.")
+                      help="Path to Google Drive API credentials JSON file.")
+    parser.add_argument("--token_file", type=str, default="token.json",
+                      help="Path to the token file (default: token.json)")
     parser.add_argument("--folder_name", type=str, default="TRIDENT_QC_Thumbnails",
-                        help="Name of the Google Drive folder to create/use.")
-    parser.add_argument("--parent_folder_id", type=str, default=None,
-                        help="ID of parent folder in Google Drive (optional).")
+                      help="Name of the Google Drive folder to create/use.")
 
     args = parser.parse_args()
 
     trident_output_dir = Path(args.trident_output_dir)
     credentials_file = Path(args.credentials_file)
+    token_file = Path(args.token_file)
 
     if not trident_output_dir.exists():
         logger.error(f"TRIDENT output directory not found: {trident_output_dir}")
@@ -144,21 +160,20 @@ def main():
         logger.error(f"Credentials file not found: {credentials_file}")
         return
 
+    if not token_file.exists():
+        logger.error(f"Token file not found: {token_file}. Please run generate_drive_token.py first.")
+        return
+
     # Authenticate with Google Drive
     logger.info("Authenticating with Google Drive...")
-    try:
-        service = authenticate_google_drive(str(credentials_file))
-        logger.info("Authentication successful!")
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
+    service = authenticate_google_drive(str(credentials_file), str(token_file))
+    if not service:
         return
 
     # Create folder in Google Drive
     logger.info(f"Creating folder '{args.folder_name}' in Google Drive...")
-    try:
-        folder_id = create_drive_folder(service, args.folder_name, args.parent_folder_id)
-    except Exception as e:
-        logger.error(f"Failed to create folder: {e}")
+    folder_id = create_drive_folder(service, args.folder_name)
+    if not folder_id:
         return
 
     # Find visualization files
@@ -179,7 +194,7 @@ def main():
     failed_count = 0
 
     for viz_file in visualization_files:
-        if upload_file_to_drive(service, str(viz_file), folder_id):
+        if upload_file_to_drive(service, viz_file, folder_id):
             uploaded_count += 1
         else:
             failed_count += 1

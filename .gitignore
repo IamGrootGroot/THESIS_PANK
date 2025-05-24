@@ -50,4 +50,9 @@ Thumbs.db
 *.h5
 *.hdf5
 *.model
-*.weights 
+*.weights
+
+# Google Drive Authentication
+token.json
+*credentials*.json
+drive_credentials.json 
