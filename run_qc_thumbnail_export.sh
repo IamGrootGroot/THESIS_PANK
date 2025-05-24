@@ -211,7 +211,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Exporting QC thumbnails with TRIDENT annotations..."
     if "$QUPATH_PATH" script --project="$project" \
                       --args="$project_output_dir" \
-                      00b_export_annotated_thumbnails_qc.groovy \
+                      THESIS_PANK/00b_export_annotated_thumbnails_qc.groovy \
                       >> "$QUPATH_LOG" 2>&1; then
         log "Successfully exported QC thumbnails for project: $project_name"
         ((SUCCESSFUL_EXPORTS++))
@@ -228,7 +228,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
             fi
             
             # Upload using Python script
-            if python3 upload_qc_thumbnails_to_drive.py \
+            if python3 THESIS_PANK/upload_qc_thumbnails_to_drive.py \
                 --qc_thumbnails_dir "$project_output_dir" \
                 --credentials_file "$CREDENTIALS_FILE" \
                 --token_file "$TOKEN_FILE" \
