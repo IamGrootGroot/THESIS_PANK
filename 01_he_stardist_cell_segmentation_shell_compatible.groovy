@@ -27,6 +27,7 @@ OVERLAP = 128  // Overlap between tiles to avoid edge artifacts
 BATCH_SIZE = 32  // Process multiple tiles in parallel on GPU
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
 NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
+MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/models/he_heavy_augment.pb"
 
 // GPU Configuration
 USE_GPU = true  // Enable GPU acceleration
@@ -38,23 +39,7 @@ ENABLE_PARALLEL_PROCESSING = true  // Enable parallel tile processing
  * @return Map containing parsed arguments
  */
 def parseArguments() {
-    def args = binding.getVariable("args")
-    if (!args) {
-        println "Error: No arguments provided"
-        return null
-    }
-    
-    def modelPath = args[0]  // First argument is the model path
-    def useGpu = USE_GPU
-    def deviceId = GPU_DEVICE_ID
-    
-    if (!modelPath) {
-        println "Error: Model path not provided"
-        return null
-    }
-    
-    println "Using model path: ${modelPath}"  // Debug output
-    return [modelPath: modelPath, useGpu: useGpu, deviceId: deviceId]
+    return [modelPath: MODEL_PATH, useGpu: USE_GPU, deviceId: GPU_DEVICE_ID]
 }
 
 /**
