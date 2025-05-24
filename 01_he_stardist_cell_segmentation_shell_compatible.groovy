@@ -27,7 +27,7 @@ OVERLAP = 128  // Overlap between tiles to avoid edge artifacts
 BATCH_SIZE = 32  // Process multiple tiles in parallel on GPU
 TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)" // Class name set by the GeoJSON import script
 NUCLEUS_CLASS_NAME = "Nucleus" // Class name for StarDist detections
-MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/models/he_heavy_augment.pb"
+MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/THESIS_PANK/models/he_heavy_augment.pb"  // Updated path to match actual location
 
 // GPU Configuration
 USE_GPU = true  // Enable GPU acceleration
