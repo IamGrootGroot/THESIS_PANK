@@ -49,8 +49,9 @@ def parseArguments() {
     def deviceId = GPU_DEVICE_ID
     
     args.each { arg ->
-        if (arg.startsWith("model=")) {
-            modelPath = arg.substring(6)
+        if (arg.startsWith("modelPath=")) {
+            // Remove quotes if present and get the actual path
+            modelPath = arg.substring(10).replaceAll("^'|'$", "")
         } else if (arg.startsWith("gpu=")) {
             useGpu = Boolean.parseBoolean(arg.substring(4))
         } else if (arg.startsWith("device=")) {
