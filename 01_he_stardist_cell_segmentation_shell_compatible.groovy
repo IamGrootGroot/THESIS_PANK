@@ -214,33 +214,9 @@ def saveImageData(imageData) {
 }
 
 /**
- * Main execution function for cell detection
+ * Process a single image with StarDist detection
  */
-def runCellDetection() {
-    print "=== StarDist2D Cell Detection with CPU Processing ==="
-    
-    // Parse command line arguments
-    def args = parseArguments()
-    if (!args) {
-        return
-    }
-
-    // Check GPU availability
-    def gpuAvailable = checkGpuAvailability()
-    print "GPU check completed. Available: ${gpuAvailable}"
-
-    // Validate model file
-    if (!validateModelFile(args.modelPath)) {
-        return
-    }
-
-    // Get the current image data (already loaded by QuPath's --image parameter)
-    def imageData = getCurrentImageData()
-    if (imageData == null) {
-        print "Error: No image is currently loaded"
-        return
-    }
-
+def processImage(imageData, stardist) {
     // Get image information
     def server = imageData.getServer()
     def imageName = server.getMetadata().getName()
@@ -258,88 +234,147 @@ def runCellDetection() {
     // Get the PathClass for TRIDENT tissue annotations
     def tridentTissueClass = getPathClass(TRIDENT_TISSUE_CLASS_NAME)
     if (tridentTissueClass == null) {
-        print "Error: PathClass '${TRIDENT_TISSUE_CLASS_NAME}' not found. Make sure TRIDENT GeoJSONs were imported correctly."
-        return
+        print "Error: PathClass '${TRIDENT_TISSUE_CLASS_NAME}' not found for ${imageName}. Skipping."
+        return [totalDetections: 0, processingTime: 0]
     }
-    print "Using PathClass for tissue regions: ${tridentTissueClass.getName()}"
 
     // Get annotations specifically from TRIDENT
     def tridentAnnotations = hierarchy.getAnnotationObjects().findAll { it.getPathClass() == tridentTissueClass }
 
     if (tridentAnnotations.isEmpty()) {
-        print "Warning: No annotations with class '${TRIDENT_TISSUE_CLASS_NAME}' found in the current image. Skipping StarDist detection for this image."
+        print "Warning: No TRIDENT annotations found in ${imageName}. Skipping."
+        return [totalDetections: 0, processingTime: 0]
+    }
+
+    print "Found ${tridentAnnotations.size()} TRIDENT annotations in ${imageName}"
+    
+    def totalDetections = 0
+    def detectionStartTime = System.currentTimeMillis()
+
+    // Run detection on the filtered TRIDENT annotations
+    tridentAnnotations.each { annotation ->
+        def roi = annotation.getROI()
+        def detections = stardist.detectObjects(imageData, roi)
+        
+        // Add all detected cells to the hierarchy
+        detections.each { detection ->
+            hierarchy.addObject(detection)
+            totalDetections++
+        }
+    }
+
+    def processingTime = System.currentTimeMillis() - detectionStartTime
+    
+    // Save results for this image
+    fireHierarchyUpdate()
+    def project = getProject()
+    if (project != null) {
+        def entry = project.getEntry(imageData)
+        if (entry != null) {
+            entry.saveImageData(imageData)
+        }
+    }
+    
+    print "Completed ${imageName}: ${totalDetections} cells detected in ${processingTime}ms"
+    return [totalDetections: totalDetections, processingTime: processingTime]
+}
+
+/**
+ * Main execution function for cell detection - processes ALL images in project
+ */
+def runCellDetection() {
+    print "=== StarDist2D Cell Detection with PARALLEL Processing ==="
+    
+    // Parse command line arguments
+    def args = parseArguments()
+    if (!args) {
         return
     }
 
-    print "Found ${tridentAnnotations.size()} '${TRIDENT_TISSUE_CLASS_NAME}' annotations to process."
+    // Check GPU availability
+    def gpuAvailable = checkGpuAvailability()
+    print "GPU check completed. Available: ${gpuAvailable}"
+
+    // Validate model file
+    if (!validateModelFile(args.modelPath)) {
+        return
+    }
+
+    // Get the project and all images
+    def project = getProject()
+    if (project == null) {
+        print "Error: No project is currently open"
+        return
+    }
     
-    // Calculate total tissue area for performance estimation
-    def totalTissueArea = tridentAnnotations.sum { it.getROI().getArea() }
-    print "Total tissue area: ${(totalTissueArea / 1000000).round(2)} mm²"
+    def imageList = project.getImageList()
+    if (imageList.isEmpty()) {
+        print "Error: No images found in the project"
+        return
+    }
+    
+    print "Found ${imageList.size()} images in the project to process"
 
     try {
-        // Create StarDist model with A6000 optimization
+        // Create StarDist model once for all images
         def startTime = System.currentTimeMillis()
         def stardist = createStarDistModel(args.modelPath, args.useGpu, args.deviceId)
         def modelLoadTime = System.currentTimeMillis() - startTime
         print "Model loaded in ${modelLoadTime}ms"
 
-        def totalTargetAnnotations = tridentAnnotations.size()
-        def processedAnnotationsCount = 0
         def totalDetections = 0
-        def detectionStartTime = System.currentTimeMillis()
+        def totalProcessingTime = 0
+        def processedImages = 0
+        def pipelineStartTime = System.currentTimeMillis()
 
-        // Run detection on the filtered TRIDENT annotations
-        tridentAnnotations.each { annotation ->
-            processedAnnotationsCount++
-            print "Processing TRIDENT annotation ${processedAnnotationsCount}/${totalTargetAnnotations}: ${annotation.getName() ?: 'Unnamed'}"
-            
-            def annotationStartTime = System.currentTimeMillis()
-            
-            // Get the ROI from the annotation
-            def roi = annotation.getROI()
-            def annotationArea = roi.getArea()
-            
-            // Use the correct method signature: detectObjects(imageData, roi)
-            def detections = stardist.detectObjects(imageData, roi)
-            
-            // Add all detected cells to the hierarchy
-            detections.each { detection ->
-                hierarchy.addObject(detection)
-                totalDetections++
+        // Process images in parallel using Groovy's parallel collections
+        print "Starting PARALLEL processing of ${imageList.size()} images..."
+        
+        // Use parallel processing for multiple images
+        def results = imageList.parallelStream().map { entry ->
+            try {
+                def imageData = entry.readImageData()
+                if (imageData != null) {
+                    return processImage(imageData, stardist)
+                } else {
+                    print "Warning: Could not load image data for ${entry.getImageName()}"
+                    return [totalDetections: 0, processingTime: 0]
+                }
+            } catch (Exception e) {
+                print "Error processing image ${entry.getImageName()}: ${e.getMessage()}"
+                return [totalDetections: 0, processingTime: 0]
             }
-            
-            def annotationTime = System.currentTimeMillis() - annotationStartTime
-            def cellDensity = detections.size() / (annotationArea / 1000000) // cells per mm²
-            
-            print "Added ${detections.size()} cell detections (${cellDensity.round(0)} cells/mm²) in ${annotationTime}ms"
+        }.collect()
+
+        // Aggregate results
+        results.each { result ->
+            totalDetections += result.totalDetections
+            totalProcessingTime += result.processingTime
+            if (result.totalDetections > 0) {
+                processedImages++
+            }
         }
 
-        def totalDetectionTime = System.currentTimeMillis() - detectionStartTime
-        def avgTimePerAnnotation = totalDetectionTime / totalTargetAnnotations
-        def cellsPerSecond = totalDetections / (totalDetectionTime / 1000.0)
-
+        def pipelineTotalTime = System.currentTimeMillis() - pipelineStartTime
+        
+        // Final project save
+        project.syncChanges()
+        
+        // Print final results
+        print "=== PARALLEL Processing Results ==="
+        print "Total images processed: ${imageList.size()}"
+        print "Images with detections: ${processedImages}"
+        print "Total cells detected: ${totalDetections}"
+        print "Total processing time: ${pipelineTotalTime}ms"
+        print "Average time per image: ${(pipelineTotalTime / imageList.size()).round(0)}ms"
         if (totalDetections > 0) {
-            // Save results
-            print "=== Detection Results ==="
-            print "Total cells detected: ${totalDetections}"
-            print "Average cells per annotation: ${(totalDetections / totalTargetAnnotations).round(0)}"
-            print "Total detection time: ${totalDetectionTime}ms"
-            print "Average time per annotation: ${avgTimePerAnnotation.round(0)}ms"
-            print "Detection speed: ${cellsPerSecond.round(1)} cells/second"
-            
-            fireHierarchyUpdate()
-            
-            // Explicitly save to project
-            saveImageData(imageData)
-            
-            print "Completed StarDist detection for the current image."
-        } else {
-            print "No cells detected by StarDist within the provided TRIDENT annotations for the current image."
-            saveImageData(imageData)
+            print "Detection speed: ${(totalDetections / (pipelineTotalTime / 1000.0)).round(1)} cells/second"
         }
+        
+        print "PARALLEL StarDist detection completed for all images in the project."
+        
     } catch (Exception e) {
-        print "Error during detection: " + e.getMessage()
+        print "Error during parallel detection: " + e.getMessage()
         e.printStackTrace()
     }
 }
