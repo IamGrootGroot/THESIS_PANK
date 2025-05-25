@@ -1,413 +1,113 @@
 /*
- * Copyright (c) 2024 Maxence PELLOUX
- * All rights reserved.
- *
- * This script is part of the PANK thesis project and implements the first step
- * of the cell segmentation pipeline using StarDist2D for H&E stained images.
- * Optimized for A6000 GPU acceleration.
+ * Simple and Reliable StarDist Cell Segmentation
+ * Based on A.Khellaf's working version, modified for TRIDENT annotations
+ * 
+ * This script processes all "Tissue (TRIDENT)" annotations in the current image
+ * using StarDist2D for cell detection.
  */
 
-import qupath.lib.objects.classes.PathClass
 import qupath.ext.stardist.StarDist2D
-import qupath.lib.images.ImageData
-import qupath.lib.projects.Project
-import qupath.lib.images.servers.ImageServerProvider
-import qupath.lib.roi.ROIs
-import qupath.lib.objects.PathObjects
-import qupath.lib.regions.ImagePlane
+import qupath.lib.objects.classes.PathClass
 
-// Configuration parameters for StarDist2D cell segmentation (128-core CPU optimized)
-PIXEL_SIZE = 0.23  // microns per pixel
-DETECTION_THRESHOLD = 0.25
-CELL_EXPANSION = 0.0
-MAX_IMAGE_DIMENSION = 16384  // Larger for powerful CPU
-NORMALIZATION_PERCENTILES = [0.2, 99.8]
-TILE_SIZE = 1024  // Optimal CPU tile size
-OVERLAP = 64  // Balanced overlap
-BATCH_SIZE = 4  // Small batches for CPU but still faster
-TRIDENT_TISSUE_CLASS_NAME = "Tissue (TRIDENT)"
-NUCLEUS_CLASS_NAME = "Nucleus"
-MODEL_PATH = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
+// Configuration - using the working model path from the server
+def pathModel = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 
-// CPU Configuration - optimized for 128-core server
-USE_GPU = false
-GPU_DEVICE_ID = 0
-ENABLE_PARALLEL_PROCESSING = true  // Enable for 128-core beast!
+println "=== Simple StarDist Cell Detection ==="
+println "Model path: ${pathModel}"
 
-/**
- * Parse command line arguments
- * @return Map containing parsed arguments
- */
-def parseArguments() {
-    return [modelPath: MODEL_PATH, useGpu: USE_GPU, deviceId: GPU_DEVICE_ID]
+// Check if model file exists
+def modelFile = new File(pathModel)
+if (!modelFile.exists()) {
+    println "ERROR: Model file not found at ${pathModel}"
+    return
 }
 
-/**
- * Validates the existence of the StarDist model file
- * @param modelPath Path to the model file
- * @return boolean indicating if the model file exists
- */
-def validateModelFile(String modelPath) {
-    def modelFile = new File(modelPath)
-    if (!modelFile.exists()) {
-        print "Error: Model file not found at ${modelPath}"
-        return false
+// Get current image data
+def imageData = getCurrentImageData()
+if (imageData == null) {
+    println "ERROR: No image data available"
+    return
+}
+
+def server = imageData.getServer()
+def imageName = server.getMetadata().getName()
+println "Processing image: ${imageName}"
+
+// Get hierarchy and find TRIDENT annotations
+def hierarchy = imageData.getHierarchy()
+def tridentClass = getPathClass("Tissue (TRIDENT)")
+
+if (tridentClass == null) {
+    println "ERROR: PathClass 'Tissue (TRIDENT)' not found"
+    println "Available classes:"
+    getPathClasses().each { pathClass ->
+        println "  - ${pathClass.getName()}"
     }
-    return true
+    return
 }
 
-/**
- * Check GPU availability and print system information
- * @return boolean indicating if GPU is available
- */
-def checkGpuAvailability() {
-    try {
-        // Try to get system properties related to CUDA
-        def javaLibraryPath = System.getProperty("java.library.path")
-        print "Java library path: ${javaLibraryPath}"
-        
-        // Check for CUDA-related environment variables
-        def cudaPath = System.getenv("CUDA_PATH")
-        def cudaHome = System.getenv("CUDA_HOME")
-        
-        if (cudaPath != null) {
-            print "CUDA_PATH detected: ${cudaPath}"
-        }
-        if (cudaHome != null) {
-            print "CUDA_HOME detected: ${cudaHome}"
-        }
-        
-        // Check available processors for parallel processing
-        def availableProcessors = Runtime.getRuntime().availableProcessors()
-        print "Available processors: ${availableProcessors}"
-        
-        // Check memory
-        def maxMemory = Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024)
-        print "Maximum JVM memory: ${maxMemory.round(2)} GB"
-        
-        return true
-    } catch (Exception e) {
-        print "GPU availability check failed: ${e.getMessage()}"
-        return false
-    }
+// Find all TRIDENT annotations
+def tridentAnnotations = hierarchy.getAnnotationObjects().findAll { 
+    it.getPathClass() == tridentClass 
 }
 
-/**
- * Creates and configures the StarDist2D model with A6000 optimization
- * @param modelPath Path to the model file
- * @param useGpu Whether to use GPU acceleration
- * @param deviceId GPU device ID to use
- * @return configured StarDist2D instance
- */
-def createStarDistModel(String modelPath, boolean useGpu, int deviceId) {
-    print "Configuring StarDist2D model..."
-    print "Model path: ${modelPath}"
-    print "GPU acceleration: ${useGpu}"
-    print "Device ID: ${deviceId}"
+if (tridentAnnotations.isEmpty()) {
+    println "WARNING: No TRIDENT annotations found in ${imageName}"
+    return
+}
+
+println "Found ${tridentAnnotations.size()} TRIDENT annotation(s)"
+
+// Create StarDist detector with simple, reliable settings
+println "Creating StarDist detector..."
+def stardist = StarDist2D.builder(pathModel)
+    .threshold(0.25)              // Prediction threshold
+    .preprocess(                  // Apply normalization
+        StarDist2D.imageNormalizationBuilder()
+            .maxDimension(4096)   // Conservative max dimension
+            .percentiles(0.2, 99.8)  // Normalization percentiles
+            .build()
+    )
+    .pixelSize(0.23)              // Resolution: 0.23um per pixel
+    .build()
+
+println "StarDist detector created successfully"
+
+// Process each TRIDENT annotation
+def totalDetections = 0
+def startTime = System.currentTimeMillis()
+
+tridentAnnotations.eachWithIndex { annotation, index ->
+    println "Processing TRIDENT annotation ${index + 1}/${tridentAnnotations.size()}"
     
     try {
-        def builder = StarDist2D.builder(modelPath)
-            .threshold(DETECTION_THRESHOLD)
-            .pixelSize(PIXEL_SIZE)
-            .cellExpansion(CELL_EXPANSION)
-            .tileSize(TILE_SIZE)
-            .measureShape()
-            .measureIntensity()
-            .classify(PathClass.fromString(NUCLEUS_CLASS_NAME))
+        // Run detection on this annotation
+        def detections = stardist.detectObjects(imageData, annotation)
+        totalDetections += detections.size()
         
-        // Use the newer preprocessGlobal method instead of deprecated preprocess
-        try {
-            builder = builder.preprocessGlobal(
-                StarDist2D.imageNormalizationBuilder()
-                    .maxDimension(MAX_IMAGE_DIMENSION)
-                    .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
-                    .build()
-            )
-            print "Using preprocessGlobal method"
-        } catch (Exception e) {
-            // Fallback to deprecated method if newer one is not available
-            builder = builder.preprocess(
-                StarDist2D.imageNormalizationBuilder()
-                    .maxDimension(MAX_IMAGE_DIMENSION)
-                    .percentiles(NORMALIZATION_PERCENTILES[0], NORMALIZATION_PERCENTILES[1])
-                    .build()
-            )
-            print "Using deprecated preprocess method as fallback"
-        }
-        
-        // Add GPU-specific configurations
-        if (useGpu) {
-            print "Attempting to enable GPU acceleration..."
-            try {
-                // Try different approaches for GPU configuration
-                if (builder.hasProperty('useGPU')) {
-                    builder = builder.useGPU(true)
-                    print "GPU acceleration enabled via useGPU()"
-                } else if (builder.hasProperty('device')) {
-                    builder = builder.device("GPU:${deviceId}")
-                    print "GPU device set via device() method"
-                }
-                
-                // Enable parallel processing for A6000
-                if (ENABLE_PARALLEL_PROCESSING && builder.hasProperty('parallelProcessing')) {
-                    builder = builder.parallelProcessing(true)
-                    print "Parallel processing enabled"
-                } else {
-                    print "Parallel processing disabled"
-                }
-                
-                // Set batch size for A6000
-                if (builder.hasProperty('batchSize')) {
-                    builder = builder.batchSize(BATCH_SIZE)
-                    print "Batch size set to: ${BATCH_SIZE}"
-                }
-                
-                // Set tile overlap
-                if (builder.hasProperty('overlap')) {
-                    builder = builder.overlap(OVERLAP)
-                    print "Tile overlap set to: ${OVERLAP}"
-                }
-                
-            } catch (Exception e) {
-                print "Warning: Could not configure GPU acceleration: ${e.getMessage()}"
-                print "Falling back to CPU processing"
-                useGpu = false
-            }
-        }
-        
-        if (!useGpu) {
-            print "Using CPU processing"
-        }
-        
-        def model = builder.build()
-        print "StarDist2D model configured successfully"
-        return model
+        println "  Detected ${detections.size()} cells in annotation ${index + 1}"
         
     } catch (Exception e) {
-        print "Error creating StarDist model: ${e.getMessage()}"
-        e.printStackTrace()
-        throw e
+        println "  ERROR processing annotation ${index + 1}: ${e.getMessage()}"
     }
 }
 
-/**
- * Explicitly save the current image data to the project
- * @param imageData The current image data to save
- */
-def saveImageData(imageData) {
-    def project = getProject()
-    if (project == null) {
-        print "Error: Cannot save - no project available"
-        return
-    }
-    
-    def entry = project.getEntry(imageData)
-    if (entry == null) {
-        print "Error: Cannot save - no project entry found for current image"
-        return
-    }
-    
-    print "Saving changes to project..."
-    entry.saveImageData(imageData)
-    project.syncChanges()
-    print "Project saved successfully"
+def processingTime = System.currentTimeMillis() - startTime
+
+// Update hierarchy and save
+println "Updating hierarchy..."
+fireHierarchyUpdate()
+
+// Print summary
+println "=== Detection Complete ==="
+println "Image: ${imageName}"
+println "TRIDENT annotations processed: ${tridentAnnotations.size()}"
+println "Total cells detected: ${totalDetections}"
+println "Processing time: ${processingTime}ms"
+println "Average cells per annotation: ${tridentAnnotations.size() > 0 ? (totalDetections / tridentAnnotations.size()).round(1) : 0}"
+
+if (totalDetections > 0) {
+    println "Detection speed: ${(totalDetections / (processingTime / 1000.0)).round(1)} cells/second"
 }
 
-/**
- * Process a single image with StarDist detection (thread-safe version)
- */
-def processImage(imageData, modelPath, useGpu, deviceId) {
-    // Get image information
-    def server = imageData.getServer()
-    def imageName = server.getMetadata().getName()
-    def imageWidth = server.getWidth()
-    def imageHeight = server.getHeight()
-    def magnification = server.getMetadata().getMagnification()
-    
-    print "Processing image: ${imageName}"
-    print "Dimensions: ${imageWidth} x ${imageHeight}"
-    print "Magnification: ${magnification}x"
-
-    // Setup hierarchy
-    def hierarchy = imageData.getHierarchy()
-    
-    // Get the PathClass for TRIDENT tissue annotations
-    def tridentTissueClass = getPathClass(TRIDENT_TISSUE_CLASS_NAME)
-    if (tridentTissueClass == null) {
-        print "Error: PathClass '${TRIDENT_TISSUE_CLASS_NAME}' not found for ${imageName}. Skipping."
-        return [totalDetections: 0, processingTime: 0]
-    }
-
-    // Get annotations specifically from TRIDENT
-    def tridentAnnotations = hierarchy.getAnnotationObjects().findAll { it.getPathClass() == tridentTissueClass }
-
-    if (tridentAnnotations.isEmpty()) {
-        print "Warning: No TRIDENT annotations found in ${imageName}. Skipping."
-        return [totalDetections: 0, processingTime: 0]
-    }
-
-    print "Found ${tridentAnnotations.size()} TRIDENT annotations in ${imageName}"
-    
-    def totalDetections = 0
-    def detectionStartTime = System.currentTimeMillis()
-
-    // Create thread-local StarDist model for this image
-    def stardist = createStarDistModel(modelPath, useGpu, deviceId)
-    print "Created StarDist model for ${imageName}"
-
-    // Run detection on the filtered TRIDENT annotations
-    tridentAnnotations.each { annotation ->
-        def roi = annotation.getROI()
-        def detections = stardist.detectObjects(imageData, roi)
-        
-        // Add all detected cells to the hierarchy
-        detections.each { detection ->
-            hierarchy.addObject(detection)
-            totalDetections++
-        }
-    }
-
-    def processingTime = System.currentTimeMillis() - detectionStartTime
-    
-    // Save results for this image
-    fireHierarchyUpdate()
-    def project = getProject()
-    if (project != null) {
-        def entry = project.getEntry(imageData)
-        if (entry != null) {
-            entry.saveImageData(imageData)
-        }
-    }
-    
-    print "Completed ${imageName}: ${totalDetections} cells detected in ${processingTime}ms"
-    return [totalDetections: totalDetections, processingTime: processingTime]
-}
-
-/**
- * Main execution function for cell detection - processes ALL images in project
- */
-def runCellDetection() {
-    print "=== StarDist2D Cell Detection with OPTIMIZED Processing ==="
-    
-    // Parse command line arguments
-    def args = parseArguments()
-    if (!args) {
-        return
-    }
-
-    // Check GPU availability
-    def gpuAvailable = checkGpuAvailability()
-    print "GPU check completed. Available: ${gpuAvailable}"
-
-    // Validate model file
-    if (!validateModelFile(args.modelPath)) {
-        return
-    }
-
-    // Get the project and all images
-    def project = getProject()
-    if (project == null) {
-        print "Error: No project is currently open"
-        return
-    }
-    
-    def imageList = project.getImageList()
-    if (imageList.isEmpty()) {
-        print "Error: No images found in the project"
-        return
-    }
-    
-    print "Found ${imageList.size()} images in the project to process"
-
-    try {
-        def totalDetections = 0
-        def totalProcessingTime = 0
-        def processedImages = 0
-        def pipelineStartTime = System.currentTimeMillis()
-
-        // Process images in TRUE parallel using thread-safe approach
-        print "Starting OPTIMIZED processing of ${imageList.size()} images..."
-        print "Sequential processing with internal StarDist parallelism for reliability"
-        
-                // Process images sequentially to avoid cross-contamination
-        // (Parallelism still occurs within each image via StarDist's internal threading)
-        def results = []
-        imageList.eachWithIndex { entry, index ->
-            try {
-                print "=== Processing image ${index + 1}/${imageList.size()}: ${entry.getImageName()} ==="
-                def imageData = entry.readImageData()
-                if (imageData != null) {
-                    // Clear any existing detections to prevent accumulation
-                    def hierarchy = imageData.getHierarchy()
-                    def existingDetections = hierarchy.getDetectionObjects()
-                    if (!existingDetections.isEmpty()) {
-                        print "Clearing ${existingDetections.size()} existing detections from ${entry.getImageName()}"
-                        hierarchy.removeObjects(existingDetections, true)
-                    }
-                    
-                    def result = processImage(imageData, args.modelPath, args.useGpu, args.deviceId)
-                    
-                    // Save immediately after processing each image
-                    if (project != null) {
-                        def projectEntry = project.getEntry(imageData)
-                        if (projectEntry != null) {
-                            projectEntry.saveImageData(imageData)
-                            print "Saved ${result.totalDetections} detections for ${entry.getImageName()}"
-                        }
-                        project.syncChanges()
-                    }
-                    
-                    results.add(result)
-                    print "=== Completed processing: ${entry.getImageName()} - ${result.totalDetections} cells ==="
-                    
-                    // Progress update
-                    def totalSoFar = results.sum { it.totalDetections }
-                    print "Progress: ${index + 1}/${imageList.size()} | Total cells so far: ${totalSoFar}"
-                    print "=" * 60
-                } else {
-                    print "Warning: Could not load image data for ${entry.getImageName()}"
-                    results.add([totalDetections: 0, processingTime: 0])
-                }
-            } catch (Exception e) {
-                print "Error processing image ${entry.getImageName()}: ${e.getMessage()}"
-                e.printStackTrace()
-                results.add([totalDetections: 0, processingTime: 0])
-            }
-        }
-
-        // Aggregate results
-        results.each { result ->
-            totalDetections += result.totalDetections
-            totalProcessingTime += result.processingTime
-            if (result.totalDetections > 0) {
-                processedImages++
-            }
-        }
-
-        def pipelineTotalTime = System.currentTimeMillis() - pipelineStartTime
-        
-        // Final project save
-        project.syncChanges()
-        
-        // Print final results
-        print "=== ISOLATED Processing Results ==="
-        print "Total images processed: ${imageList.size()}"
-        print "Images with detections: ${processedImages}"
-        print "Total cells detected: ${totalDetections}"
-        print "Total processing time: ${pipelineTotalTime}ms"
-        print "Average time per image: ${(pipelineTotalTime / imageList.size()).round(0)}ms"
-        if (totalDetections > 0) {
-            print "Detection speed: ${(totalDetections / (pipelineTotalTime / 1000.0)).round(1)} cells/second"
-        }
-        
-        print "ISOLATED StarDist detection completed for all images in the project."
-        
-    } catch (Exception e) {
-        print "Error during parallel detection: " + e.getMessage()
-        e.printStackTrace()
-    }
-}
-
-// Execute the main function
-runCellDetection()
-print "StarDist nucleus detection script finished for the current image!"
+println "Done!"
