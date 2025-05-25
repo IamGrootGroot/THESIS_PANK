@@ -121,28 +121,12 @@ process_project() {
         return 1
     fi
     
-    # Run StarDist cell segmentation with explicit extension loading
+    # Run StarDist cell segmentation
     log "Running StarDist cell segmentation for $project_name"
-    
-    # Ensure extensions directory exists and StarDist extension is available
-    QUPATH_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath"
-    EXTENSIONS_DIR="$QUPATH_DIR/extensions"
-    STARDIST_JAR="$QUPATH_DIR/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
-    
-    if [ ! -d "$EXTENSIONS_DIR" ]; then
-        log "Creating extensions directory: $EXTENSIONS_DIR"
-        mkdir -p "$EXTENSIONS_DIR"
-    fi
-    
-    if [ ! -f "$EXTENSIONS_DIR/qupath-extension-stardist-0.6.0-rc1.jar" ]; then
-        log "Linking StarDist extension to extensions directory"
-        ln -sf "$STARDIST_JAR" "$EXTENSIONS_DIR/"
-    fi
-    
     if "$QUPATH_PATH" script \
             --project="$project_file" \
             "$CELL_SEG_SCRIPT" \
-            2>&1 | tee -a "$LOG_FILE"; then
+            >> "$LOG_FILE" 2>&1; then
         log "StarDist segmentation completed successfully for $project_name"
         
         # Allow QuPath to save changes
