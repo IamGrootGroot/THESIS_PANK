@@ -348,7 +348,6 @@ def runCellDetection() {
                     def result = processImage(imageData, args.modelPath, args.useGpu, args.deviceId)
                     
                     // Save immediately after processing each image
-                    def project = getProject()
                     if (project != null) {
                         def projectEntry = project.getEntry(imageData)
                         if (projectEntry != null) {
