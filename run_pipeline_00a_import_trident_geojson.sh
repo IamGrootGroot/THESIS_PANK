@@ -203,8 +203,10 @@ process_project() {
         return 1
     fi
     
-    # Run the GeoJSON import script
-    if "$QUPATH_PATH" script --project="$project_file" \
+    # Run the GeoJSON import script with proper classpath
+    QUPATH_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath"
+    if JAVA_OPTS="-Djava.class.path=$QUPATH_DIR/lib/*:$QUPATH_DIR/lib/app/*" \
+       "$QUPATH_PATH" script --project="$project_file" \
                     --args="$TRIDENT_DIR" \
                     00a_import_trident_geojson.groovy \
                     >> "$QUPATH_LOG" 2>&1; then
