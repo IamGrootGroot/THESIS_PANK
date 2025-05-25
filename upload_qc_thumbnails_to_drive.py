@@ -28,7 +28,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
 def authenticate_google_drive(credentials_file, token_file):
     """
-    Authenticate with Google Drive API using credentials and token files.
+    Authenticate with Google Drive API using token file (credentials file optional).
     """
     creds = None
     
@@ -36,6 +36,7 @@ def authenticate_google_drive(credentials_file, token_file):
     if os.path.exists(token_file):
         try:
             creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+            logger.info(f"Loaded credentials from token file: {token_file}")
         except Exception as e:
             logger.error(f"Error loading token file: {e}")
             return None
@@ -44,23 +45,34 @@ def authenticate_google_drive(credentials_file, token_file):
     if creds and not creds.valid:
         if creds.expired and creds.refresh_token:
             try:
+                logger.info("Token expired, attempting to refresh...")
                 creds.refresh(Request())
                 # Save the refreshed credentials
                 with open(token_file, 'w') as token:
                     token.write(creds.to_json())
+                logger.info("Token refreshed successfully")
             except Exception as e:
                 logger.error(f"Error refreshing token: {e}")
                 return None
         else:
-            logger.error("Token is invalid and cannot be refreshed. Please generate a new token using generate_drive_token.py")
+            logger.error("Token is invalid and cannot be refreshed.")
+            if credentials_file and os.path.exists(credentials_file):
+                logger.error(f"Please regenerate token using generate_drive_token.py with {credentials_file}")
+            else:
+                logger.error("Please regenerate token using generate_drive_token.py")
             return None
 
     if not creds:
-        logger.error(f"No valid credentials found. Please run generate_drive_token.py first.")
+        logger.error(f"No valid credentials found in token file: {token_file}")
+        if credentials_file and os.path.exists(credentials_file):
+            logger.error(f"Please run generate_drive_token.py with {credentials_file} to create a new token")
+        else:
+            logger.error("Please run generate_drive_token.py to create a new token")
         return None
 
     try:
         service = build('drive', 'v3', credentials=creds)
+        logger.info("Successfully authenticated with Google Drive")
         return service
     except Exception as e:
         logger.error(f"Error building Drive service: {e}")
@@ -183,10 +195,13 @@ def upload_text_file_to_drive(service, text_content, file_name, folder_id):
 
 def main():
     parser = argparse.ArgumentParser(description="Upload QuPath QC thumbnails to Google Drive.")
-    parser.add_argument("--qc_thumbnails_dir", type=str, required=True,
+    parser.add_argument("--qc_thumbnails_dir", type=str,
                       help="Directory containing QC thumbnail files from QuPath.")
+    # Support both old and new parameter names for backward compatibility
+    parser.add_argument("--trident_output_dir", type=str, 
+                      help="Alias for --qc_thumbnails_dir (for backward compatibility)")
     parser.add_argument("--credentials_file", type=str, default="drive_credentials.json",
-                      help="Path to Google Drive API credentials JSON file.")
+                      help="Path to Google Drive API credentials JSON file (optional if token.json is valid).")
     parser.add_argument("--token_file", type=str, default="token.json",
                       help="Path to the token file (default: token.json)")
     parser.add_argument("--folder_name", type=str, 
@@ -194,21 +209,30 @@ def main():
 
     args = parser.parse_args()
 
-    qc_thumbnails_dir = Path(args.qc_thumbnails_dir)
-    credentials_file = Path(args.credentials_file)
+    # Handle backward compatibility - use trident_output_dir if qc_thumbnails_dir not provided
+    if args.trident_output_dir:
+        qc_thumbnails_dir = Path(args.trident_output_dir)
+    elif args.qc_thumbnails_dir:
+        qc_thumbnails_dir = Path(args.qc_thumbnails_dir)
+    else:
+        logger.error("Please specify either --qc_thumbnails_dir or --trident_output_dir")
+        return
+    
+    credentials_file = Path(args.credentials_file) if args.credentials_file else None
     token_file = Path(args.token_file)
 
     if not qc_thumbnails_dir.exists():
         logger.error(f"QC thumbnails directory not found: {qc_thumbnails_dir}")
         return
 
-    if not credentials_file.exists():
-        logger.error(f"Credentials file not found: {credentials_file}")
-        return
-
     if not token_file.exists():
         logger.error(f"Token file not found: {token_file}. Please run generate_drive_token.py first.")
         return
+
+    # Credentials file is optional if token is valid
+    if credentials_file and not credentials_file.exists():
+        logger.warning(f"Credentials file not found: {credentials_file} (will try to use token file only)")
+        credentials_file = None
 
     # Auto-generate folder name if not provided
     if not args.folder_name:
