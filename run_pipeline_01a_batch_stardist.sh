@@ -96,7 +96,7 @@ fi
 # Initialize
 echo "==============================================="
 echo "     PANK Thesis - Pipeline Step 01"
-echo "     StarDist Cell Segmentation (128-Core Optimized)"
+echo "     StarDist Cell Segmentation (True Parallel)"
 echo "==============================================="
 echo "Parallel jobs: $MAX_PARALLEL_JOBS"
 echo "Memory per job: $JAVA_MEMORY"

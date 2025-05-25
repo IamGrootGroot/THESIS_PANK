@@ -214,9 +214,9 @@ def saveImageData(imageData) {
 }
 
 /**
- * Process a single image with StarDist detection
+ * Process a single image with StarDist detection (thread-safe version)
  */
-def processImage(imageData, stardist) {
+def processImage(imageData, modelPath, useGpu, deviceId) {
     // Get image information
     def server = imageData.getServer()
     def imageName = server.getMetadata().getName()
@@ -251,6 +251,10 @@ def processImage(imageData, stardist) {
     def totalDetections = 0
     def detectionStartTime = System.currentTimeMillis()
 
+    // Create thread-local StarDist model for this image
+    def stardist = createStarDistModel(modelPath, useGpu, deviceId)
+    print "Created StarDist model for ${imageName}"
+
     // Run detection on the filtered TRIDENT annotations
     tridentAnnotations.each { annotation ->
         def roi = annotation.getROI()
@@ -283,7 +287,7 @@ def processImage(imageData, stardist) {
  * Main execution function for cell detection - processes ALL images in project
  */
 def runCellDetection() {
-    print "=== StarDist2D Cell Detection with PARALLEL Processing ==="
+    print "=== StarDist2D Cell Detection with TRUE PARALLEL Processing ==="
     
     // Parse command line arguments
     def args = parseArguments()
@@ -316,32 +320,45 @@ def runCellDetection() {
     print "Found ${imageList.size()} images in the project to process"
 
     try {
-        // Create StarDist model once for all images
-        def startTime = System.currentTimeMillis()
-        def stardist = createStarDistModel(args.modelPath, args.useGpu, args.deviceId)
-        def modelLoadTime = System.currentTimeMillis() - startTime
-        print "Model loaded in ${modelLoadTime}ms"
-
         def totalDetections = 0
         def totalProcessingTime = 0
         def processedImages = 0
         def pipelineStartTime = System.currentTimeMillis()
 
-        // Process images in parallel using Groovy's parallel collections
-        print "Starting PARALLEL processing of ${imageList.size()} images..."
+        // Process images in TRUE parallel using thread-safe approach
+        print "Starting TRUE PARALLEL processing of ${imageList.size()} images..."
+        print "Each image gets its own StarDist model instance for thread safety"
         
-        // Use parallel processing for multiple images
+        // Use parallel processing with thread-safe model creation
         def results = imageList.parallelStream().map { entry ->
             try {
+                print "=== Starting parallel processing: ${entry.getImageName()} ==="
                 def imageData = entry.readImageData()
                 if (imageData != null) {
-                    return processImage(imageData, stardist)
+                    def result = processImage(imageData, args.modelPath, args.useGpu, args.deviceId)
+                    
+                    // Thread-safe project saving
+                    synchronized(this) {
+                        def project = getProject()
+                        if (project != null) {
+                            def projectEntry = project.getEntry(imageData)
+                            if (projectEntry != null) {
+                                projectEntry.saveImageData(imageData)
+                            }
+                            project.syncChanges()
+                            print "Project saved after processing ${entry.getImageName()}"
+                        }
+                    }
+                    
+                    print "=== Completed parallel processing: ${entry.getImageName()} - ${result.totalDetections} cells ==="
+                    return result
                 } else {
                     print "Warning: Could not load image data for ${entry.getImageName()}"
                     return [totalDetections: 0, processingTime: 0]
                 }
             } catch (Exception e) {
                 print "Error processing image ${entry.getImageName()}: ${e.getMessage()}"
+                e.printStackTrace()
                 return [totalDetections: 0, processingTime: 0]
             }
         }.collect()
@@ -361,7 +378,7 @@ def runCellDetection() {
         project.syncChanges()
         
         // Print final results
-        print "=== PARALLEL Processing Results ==="
+        print "=== TRUE PARALLEL Processing Results ==="
         print "Total images processed: ${imageList.size()}"
         print "Images with detections: ${processedImages}"
         print "Total cells detected: ${totalDetections}"
@@ -371,7 +388,7 @@ def runCellDetection() {
             print "Detection speed: ${(totalDetections / (pipelineTotalTime / 1000.0)).round(1)} cells/second"
         }
         
-        print "PARALLEL StarDist detection completed for all images in the project."
+        print "TRUE PARALLEL StarDist detection completed for all images in the project."
         
     } catch (Exception e) {
         print "Error during parallel detection: " + e.getMessage()
