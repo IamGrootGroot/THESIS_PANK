@@ -95,8 +95,12 @@ if [ ! -f "$STARDIST_JAR" ]; then
     exit 1
 fi
 
-if [ ! -f "01_he_stardist_cell_segmentation_shell_compatible.groovy" ]; then
-    error_log "StarDist script not found: 01_he_stardist_cell_segmentation_shell_compatible.groovy"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CELL_SEG_SCRIPT="$SCRIPT_DIR/01_he_stardist_cell_segmentation_shell_compatible.groovy"
+
+if [ ! -f "$CELL_SEG_SCRIPT" ]; then
+    error_log "StarDist script not found: $CELL_SEG_SCRIPT"
     exit 1
 fi
 
@@ -118,7 +122,7 @@ process_project() {
     log "Running StarDist cell segmentation for $project_name"
     if java -cp "$QUPATH_CLASSPATH" qupath.QuPath script \
                 --project="$project_file" \
-                01_he_stardist_cell_segmentation_shell_compatible.groovy \
+                "$CELL_SEG_SCRIPT" \
                 >> "$QUPATH_LOG" 2>&1; then
         log "StarDist segmentation completed for $project_name"
     else
