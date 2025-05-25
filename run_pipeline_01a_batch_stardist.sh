@@ -121,9 +121,21 @@ process_project() {
         return 1
     fi
     
-    # Run StarDist cell segmentation
+    # Ensure StarDist extension is available in main lib directory for headless mode
+    QUPATH_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath"
+    STARDIST_JAR="$QUPATH_DIR/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
+    MAIN_LIB_DIR="$QUPATH_DIR/lib"
+    
+    # Copy StarDist to main lib directory if not already there
+    if [ ! -f "$MAIN_LIB_DIR/qupath-extension-stardist-0.6.0-rc1.jar" ]; then
+        cp "$STARDIST_JAR" "$MAIN_LIB_DIR/"
+        log "Copied StarDist extension to main lib directory for headless loading"
+    fi
+    
+    # Run StarDist cell segmentation with forced extension loading
     log "Running StarDist cell segmentation for $project_name"
-    if "$QUPATH_PATH" script \
+    if JAVA_OPTS="-Djava.class.path=$QUPATH_DIR/lib/*:$QUPATH_DIR/lib/app/*" \
+       "$QUPATH_PATH" script \
             --project="$project_file" \
             "$CELL_SEG_SCRIPT" \
             >> "$LOG_FILE" 2>&1; then
