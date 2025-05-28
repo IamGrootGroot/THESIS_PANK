@@ -415,6 +415,12 @@ for project_file in "${project_files[@]}"; do
     fi
 done
 
+# Wait for files to be fully written to disk
+if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
+    log "Waiting for QC files to be fully written to disk..."
+    sleep 5
+fi
+
 # =============================================================================
 # Google Drive Upload (if requested)
 # =============================================================================
@@ -430,7 +436,15 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
         for qc_dir in "${qc_directories[@]}"; do
             if [ -d "$qc_dir" ]; then
                 project_name=$(basename "$qc_dir")
-                log "Uploading QC thumbnails for $project_name..."
+                
+                # Verify QC files exist before upload
+                qc_file_count=$(find "$qc_dir" -name "*.jpg" -o -name "*.png" | wc -l)
+                if [ "$qc_file_count" -eq 0 ]; then
+                    warn_log "No QC thumbnail files found in $qc_dir, skipping upload"
+                    continue
+                fi
+                
+                log "Uploading QC thumbnails for $project_name ($qc_file_count files)..."
                 
                 verbose_log "Running upload command: python3 $UPLOAD_SCRIPT --qc_thumbnails_dir $qc_dir --folder_name Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP} --credentials_file $TOKEN_PATH --token_file $TOKEN_PATH"
                 
