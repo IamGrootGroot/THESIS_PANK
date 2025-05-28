@@ -304,7 +304,7 @@ export_qc_for_project() {
     verbose_log "Running QC export for $project_name"
     if "$SELECTED_QUPATH_PATH" script \
             --project="$project_file" \
-            --args="$project_qc_dir" \
+            --args "$project_qc_dir" \
             "$QC_SCRIPT" \
             >> "$QUPATH_LOG" 2>&1; then
         log "QC export completed for $project_name"
