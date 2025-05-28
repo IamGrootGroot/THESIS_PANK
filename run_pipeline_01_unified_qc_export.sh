@@ -324,10 +324,41 @@ failed_exports=0
 start_time=$(date +%s)
 qc_directories=()
 
-# Determine projects to process
+# Determine projects to process based on processing mode
 if [ "$TEST_ONLY" = true ]; then
-    project_files=("QuPath_MP_PDAC5/project.qpproj")
-    log "Processing test project only (QuPath_MP_PDAC5)"
+    # Use mode-specific test projects based on QuPath_MP_PDAC2
+    # First determine the actual processing mode if auto
+    if [ "$FORCE_MODE" = "auto" ]; then
+        # Determine actual mode based on selected QuPath
+        if [[ "$SELECTED_QUPATH_PATH" == *"0.5.1"* ]]; then
+            ACTUAL_MODE="GPU"
+        elif [[ "$SELECTED_QUPATH_PATH" == *"0.6"* ]]; then
+            ACTUAL_MODE="CPU"
+        else
+            ACTUAL_MODE="GPU"  # Default fallback
+        fi
+    else
+        case "$FORCE_MODE" in
+            "gpu") ACTUAL_MODE="GPU" ;;
+            "cpu") ACTUAL_MODE="CPU" ;;
+            *) ACTUAL_MODE="GPU" ;;
+        esac
+    fi
+    
+    case "$ACTUAL_MODE" in
+        "GPU")
+            project_files=("QuPath_MP_PDAC2_0.5.1/project.qpproj")
+            log "Processing GPU test project (QuPath_MP_PDAC2_0.5.1)"
+            ;;
+        "CPU")
+            project_files=("QuPath_MP_PDAC2_0.6.0/project.qpproj")
+            log "Processing CPU test project (QuPath_MP_PDAC2_0.6.0)"
+            ;;
+        *)
+            error_log "Unknown processing mode: $ACTUAL_MODE"
+            exit 1
+            ;;
+    esac
 elif [ -n "$PROJECT_PATH" ]; then
     project_files=("$PROJECT_PATH")
     log "Processing single project: $PROJECT_PATH"
