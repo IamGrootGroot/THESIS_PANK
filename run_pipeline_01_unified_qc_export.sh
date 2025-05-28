@@ -121,15 +121,15 @@ determine_optimal_qupath() {
     # Decision logic (prefer the same as processing)
     if [ "$cuda_available" = true ] && [ "$qupath_051_available" = true ]; then
         echo "$QUPATH_051_PATH"
-        log "Auto-selected QuPath 0.5.1 for QC export (matches GPU processing)"
+        log "Auto-selected QuPath 0.5.1 for QC export (matches GPU processing)" >&2
     elif [ "$qupath_06_available" = true ]; then
         echo "$QUPATH_06_PATH"
-        log "Auto-selected QuPath 0.6 for QC export (matches CPU processing)"
+        log "Auto-selected QuPath 0.6 for QC export (matches CPU processing)" >&2
     elif [ "$qupath_051_available" = true ]; then
         echo "$QUPATH_051_PATH"
-        warn_log "Using QuPath 0.5.1 for QC export (CUDA may not be available)"
+        warn_log "Using QuPath 0.5.1 for QC export (CUDA may not be available)" >&2
     else
-        error_log "No suitable QuPath installation found for QC export"
+        error_log "No suitable QuPath installation found for QC export" >&2
         return 1
     fi
 }
@@ -141,18 +141,18 @@ setup_qupath_for_mode() {
         "gpu")
             if [ -f "$QUPATH_051_PATH" ] && [ -x "$QUPATH_051_PATH" ]; then
                 echo "$QUPATH_051_PATH"
-                log "Using QuPath 0.5.1 for GPU mode QC export"
+                log "Using QuPath 0.5.1 for GPU mode QC export" >&2
             else
-                error_log "QuPath 0.5.1 not found for GPU mode: $QUPATH_051_PATH"
+                error_log "QuPath 0.5.1 not found for GPU mode: $QUPATH_051_PATH" >&2
                 return 1
             fi
             ;;
         "cpu")
             if [ -f "$QUPATH_06_PATH" ] && [ -x "$QUPATH_06_PATH" ]; then
                 echo "$QUPATH_06_PATH"
-                log "Using QuPath 0.6 for CPU mode QC export"
+                log "Using QuPath 0.6 for CPU mode QC export" >&2
             else
-                error_log "QuPath 0.6 not found for CPU mode: $QUPATH_06_PATH"
+                error_log "QuPath 0.6 not found for CPU mode: $QUPATH_06_PATH" >&2
                 return 1
             fi
             ;;
@@ -160,7 +160,7 @@ setup_qupath_for_mode() {
             determine_optimal_qupath
             ;;
         *)
-            error_log "Invalid mode: $mode"
+            error_log "Invalid mode: $mode" >&2
             return 1
             ;;
     esac
