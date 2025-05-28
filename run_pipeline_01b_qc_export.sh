@@ -9,10 +9,13 @@
 # StarDist cell detections, then uploads them to Google Drive for review.
 # =============================================================================
 
+# =============================================================================
+# Default QuPath Configuration
+# =============================================================================
+# Default QuPath path (can be overridden with -q option)
+DEFAULT_QUPATH_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath"
+
 # Configuration
-STARDIST_JAR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
-QUPATH_CLASSPATH="$STARDIST_JAR:/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/lib/app/*"
-JAVA_MEMORY="-Xmx16g"  # Sufficient memory for QC export
 QC_OUTPUT_DIR="qc_cell_detection_thumbnails"
 
 # Help function
@@ -21,6 +24,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -p PROJECT    Export QC for specific QuPath project (.qpproj)"
+    echo "  -q PATH       Path to QuPath executable (optional)"
     echo "  -a            Export QC for all QuPath projects"
     echo "  -s            Export QC for test project only (QuPath_MP_PDAC5)"
     echo "  -o DIR        Output directory for QC thumbnails (default: $QC_OUTPUT_DIR)"
@@ -32,10 +36,12 @@ show_help() {
     echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -u"
     echo "  $0 -a -u                        # All projects with upload"
     echo "  $0 -s -o custom_qc_dir -u       # Custom output dir with upload"
+    echo "  $0 -p project.qpproj -q /path/to/QuPath  # Custom QuPath path"
     echo ""
     echo "Note: For Google Drive upload, ensure you have:"
     echo "      - drive_credentials.json"
     echo "      - token.json (generated with generate_drive_token.py)"
+    echo "      If QuPath path not specified, uses default configuration."
     exit 1
 }
 
@@ -60,9 +66,10 @@ PROCESS_ALL=false
 TEST_ONLY=false
 UPLOAD_TO_DRIVE=false
 
-while getopts "p:aso:uh" opt; do
+while getopts "p:q:aso:uh" opt; do
     case $opt in
         p) PROJECT_PATH="$OPTARG" ;;
+        q) DEFAULT_QUPATH_PATH="$OPTARG" ;;
         a) PROCESS_ALL=true ;;
         s) TEST_ONLY=true ;;
         o) QC_OUTPUT_DIR="$OPTARG" ;;
@@ -93,12 +100,21 @@ echo
 
 log "Starting Cell Detection QC export"
 
-# Validate setup
-if [ ! -f "$STARDIST_JAR" ]; then
-    error_log "StarDist JAR not found: $STARDIST_JAR"
+# =============================================================================
+# QuPath Path Configuration and Validation
+# =============================================================================
+log "Using QuPath path: $DEFAULT_QUPATH_PATH"
+
+# Validate QuPath installation
+if [ ! -f "$DEFAULT_QUPATH_PATH" ]; then
+    error_log "QuPath not found at $DEFAULT_QUPATH_PATH"
+    error_log "Please specify correct QuPath path with -q option"
     exit 1
 fi
 
+log "QuPath executable validated: $DEFAULT_QUPATH_PATH"
+
+# Validate setup
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QC_SCRIPT="$SCRIPT_DIR/00c_export_cell_detection_qc_thumbnails.groovy"
@@ -126,8 +142,7 @@ export_qc_for_project() {
     local project_qc_dir="${QC_OUTPUT_DIR}/${project_name}"
     
     # Run QC export
-    if java $JAVA_MEMORY \
-            -cp "$QUPATH_CLASSPATH" qupath.QuPath script \
+    if "$DEFAULT_QUPATH_PATH" script \
             --project="$project_file" \
             "$QC_SCRIPT" \
             "$project_qc_dir"; then
