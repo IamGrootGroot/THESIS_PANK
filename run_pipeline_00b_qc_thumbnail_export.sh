@@ -12,8 +12,8 @@
 # =============================================================================
 # Configuration
 # =============================================================================
-# Set QUPATH_PATH environment variable or provide default
-QUPATH_PATH=${QUPATH_PATH:-"/opt/QuPath/bin/QuPath"}
+# Default QuPath path (can be overridden with -q option)
+DEFAULT_QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath}"
 
 # =============================================================================
 # Help Function
@@ -23,6 +23,7 @@ show_help() {
     echo
     echo "Options:"
     echo "  -p, --project PATH     Path to QuPath project file (.qpproj)"
+    echo "  -q, --qupath PATH      Path to QuPath executable (optional)"
     echo "  -r, --trident PATH     Path to TRIDENT output directory (containing contours_geojson/)"
     echo "  -o, --output DIR       Output directory for thumbnails (default: qc_thumbnails)"
     echo "  -c, --credentials FILE Path to Google Drive credentials file (default: drive_credentials.json)"
@@ -36,12 +37,14 @@ show_help() {
     echo "  $0 -s -r /path/to/trident_output                       # Export QC for test project"
     echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -r /path/to/trident_output  # Export for specific project"
     echo "  $0 -a -r /path/to/trident_output                       # Export all projects and upload to Drive"
+    echo "  $0 -p project.qpproj -q /path/to/QuPath -r /path/to/trident  # Custom QuPath path"
     echo
     echo "Prerequisites:"
     echo "  - QuPath must be installed and QUPATH_PATH set correctly"
     echo "  - TRIDENT output directory with contours_geojson/ subdirectory"
     echo "  - Google Drive credentials and token files must be available"
     echo "  - Python with required packages (google-api-python-client, etc.)"
+    echo "  - If QuPath path not specified, uses default configuration"
     echo
     exit 1
 }
@@ -91,6 +94,10 @@ while [[ $# -gt 0 ]]; do
             PROJECT_PATH="$2"
             shift 2
             ;;
+        -q|--qupath)
+            DEFAULT_QUPATH_PATH="$2"
+            shift 2
+            ;;
         -r|--trident)
             TRIDENT_OUTPUT_PATH="$2"
             shift 2
@@ -133,11 +140,13 @@ done
 # Validation
 # =============================================================================
 # Check QuPath installation
-if [ ! -f "$QUPATH_PATH" ]; then
-    error_log "QuPath not found at $QUPATH_PATH"
-    error_log "Please set QUPATH_PATH environment variable or install QuPath"
+if [ ! -f "$DEFAULT_QUPATH_PATH" ]; then
+    error_log "QuPath not found at $DEFAULT_QUPATH_PATH"
+    error_log "Please specify correct QuPath path with -q option"
     exit 1
 fi
+
+log "Using QuPath executable: $DEFAULT_QUPATH_PATH"
 
 # Check Google Drive authentication files
 if [ ! -f "$CREDENTIALS_FILE" ]; then
@@ -242,7 +251,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     
     # Step 1: Import TRIDENT GeoJSON annotations
     log "Importing TRIDENT GeoJSON annotations..."
-    if "$QUPATH_PATH" script --project="$project" \
+    if "$DEFAULT_QUPATH_PATH" script --project="$project" \
                       --args="$TRIDENT_OUTPUT_PATH" \
                       THESIS_PANK/00a_import_trident_geojson.groovy \
                       >> "$QUPATH_TRIDENT_LOG" 2>&1; then
@@ -253,7 +262,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
         
         # Step 2: Export QC thumbnails with TRIDENT annotations
         log "Exporting QC thumbnails with TRIDENT annotations..."
-        if "$QUPATH_PATH" script --project="$project" \
+        if "$DEFAULT_QUPATH_PATH" script --project="$project" \
                           --args="$project_output_dir" \
                           THESIS_PANK/00b_export_annotated_thumbnails_qc.groovy \
                           >> "$QUPATH_QC_LOG" 2>&1; then
