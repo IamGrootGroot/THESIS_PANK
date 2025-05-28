@@ -324,6 +324,9 @@ failed_exports=0
 start_time=$(date +%s)
 qc_directories=()
 
+# Base directory for QuPath projects (parent of THESIS_PANK)
+HE_BASE_DIR="/u/trinhvq/Documents/maxencepelloux/HE"
+
 # Determine projects to process based on processing mode
 if [ "$TEST_ONLY" = true ]; then
     # Use mode-specific test projects based on QuPath_MP_PDAC2
@@ -347,11 +350,11 @@ if [ "$TEST_ONLY" = true ]; then
     
     case "$ACTUAL_MODE" in
         "GPU")
-            project_files=("QuPath_MP_PDAC2_0.5.1/project.qpproj")
+            project_files=("$HE_BASE_DIR/QuPath_MP_PDAC2_0.5.1/project.qpproj")
             log "Processing GPU test project (QuPath_MP_PDAC2_0.5.1)"
             ;;
         "CPU")
-            project_files=("QuPath_MP_PDAC2_0.6.0/project.qpproj")
+            project_files=("$HE_BASE_DIR/QuPath_MP_PDAC2_0.6.0/project.qpproj")
             log "Processing CPU test project (QuPath_MP_PDAC2_0.6.0)"
             ;;
         *)
@@ -360,11 +363,19 @@ if [ "$TEST_ONLY" = true ]; then
             ;;
     esac
 elif [ -n "$PROJECT_PATH" ]; then
-    project_files=("$PROJECT_PATH")
-    log "Processing single project: $PROJECT_PATH"
+    # Handle both relative and absolute paths
+    if [[ "$PROJECT_PATH" = /* ]]; then
+        # Absolute path
+        project_files=("$PROJECT_PATH")
+    else
+        # Relative path - assume it's relative to HE directory
+        project_files=("$HE_BASE_DIR/$PROJECT_PATH")
+    fi
+    log "Processing single project: ${project_files[0]}"
 elif [ "$PROCESS_ALL" = true ]; then
-    project_files=(QuPath_MP_PDAC*/project.qpproj)
-    log "Processing all QuPath projects"
+    # Find all QuPath projects in HE directory
+    project_files=("$HE_BASE_DIR"/QuPath_MP_PDAC*/project.qpproj)
+    log "Processing all QuPath projects in $HE_BASE_DIR"
 fi
 
 # Validate project files
