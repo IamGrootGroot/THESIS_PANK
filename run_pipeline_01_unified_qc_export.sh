@@ -33,6 +33,7 @@ show_help() {
     echo "  -m, --mode MODE      Processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
     echo "  -q, --qupath PATH    Force specific QuPath executable path"
     echo "  -u, --upload         Upload to Google Drive after export"
+    echo "  -t, --token PATH     Path to Google Drive token file (required for upload)"
     echo "  -v, --verbose        Enable verbose logging"
     echo "  -h, --help           Show this help message"
     echo
@@ -43,12 +44,11 @@ show_help() {
     echo
     echo "Examples:"
     echo "  $0 -s                           # Test project QC with auto-detection"
-    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -u -m gpu"
-    echo "  $0 -a -u -m cpu                 # All projects with CPU mode and upload"
+    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -u -t token.json -m gpu"
+    echo "  $0 -a -u -t /path/to/token.json -m cpu  # All projects with CPU mode and upload"
     echo "  $0 -s -o custom_qc_dir -v       # Custom output dir with verbose logging"
     echo
-    echo "Note: For Google Drive upload, ensure you have:"
-    echo "      - drive_credentials.json"
+    echo "Note: For Google Drive upload, you need:"
     echo "      - token.json (generated with generate_drive_token.py)"
     exit 1
 }
@@ -175,6 +175,7 @@ TEST_ONLY=false
 FORCE_MODE="auto"
 CUSTOM_QUPATH_PATH=""
 UPLOAD_TO_DRIVE=false
+TOKEN_PATH=""
 VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
@@ -207,6 +208,10 @@ while [[ $# -gt 0 ]]; do
             UPLOAD_TO_DRIVE=true
             shift
             ;;
+        -t|--token)
+            TOKEN_PATH="$2"
+            shift 2
+            ;;
         -v|--verbose)
             VERBOSE=true
             shift
@@ -236,6 +241,20 @@ fi
 if [[ ! "$FORCE_MODE" =~ ^(auto|cpu|gpu)$ ]]; then
     error_log "Invalid mode: $FORCE_MODE. Must be 'auto', 'cpu', or 'gpu'"
     show_help
+fi
+
+# Validate token file if upload is requested
+if [ "$UPLOAD_TO_DRIVE" = true ]; then
+    if [ -z "$TOKEN_PATH" ]; then
+        error_log "Token file path is required when upload is enabled. Use -t option."
+        show_help
+    fi
+    if [ ! -f "$TOKEN_PATH" ]; then
+        error_log "Token file not found: $TOKEN_PATH"
+        error_log "Please run generate_drive_token.py first"
+        exit 1
+    fi
+    log "Token file validated: $TOKEN_PATH"
 fi
 
 # =============================================================================
@@ -415,7 +434,9 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
                 
                 if python3 "$UPLOAD_SCRIPT" \
                     --qc_thumbnails_dir "$qc_dir" \
-                    --folder_name "Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP}"; then
+                    --folder_name "Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP}" \
+                    --credentials_file "$TOKEN_PATH" \
+                    --token_file "$TOKEN_PATH"; then
                     log "Successfully uploaded QC thumbnails for $project_name"
                 else
                     error_log "Failed to upload QC thumbnails for $project_name"

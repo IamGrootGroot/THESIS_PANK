@@ -242,7 +242,7 @@ def main():
 
     # Authenticate with Google Drive
     logger.info("Authenticating with Google Drive...")
-    service = authenticate_google_drive(str(credentials_file), str(token_file))
+    service = authenticate_google_drive(str(credentials_file) if credentials_file else None, str(token_file))
     if not service:
         return
 
