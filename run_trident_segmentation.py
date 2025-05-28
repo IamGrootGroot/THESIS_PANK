@@ -31,7 +31,9 @@ def run_trident_batch_segmentation(trident_script_path, image_dir, output_dir, g
     """
     Executes TRIDENT's run_batch_of_slides.py for tissue segmentation on all slides in a directory.
     """
+    # Use conda run to execute in the trident environment
     command = [
+        "conda", "run", "-n", "trident",
         "python",
         trident_script_path,
         "--task", "seg",
@@ -41,7 +43,7 @@ def run_trident_batch_segmentation(trident_script_path, image_dir, output_dir, g
         "--remove_holes"
     ]
 
-    logger.info(f"Executing TRIDENT batch segmentation: {' '.join(command)}")
+    logger.info(f"Executing TRIDENT batch segmentation with conda environment: {' '.join(command)}")
     try:
         # Using shell=False for security and better control.
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -59,7 +61,7 @@ def run_trident_batch_segmentation(trident_script_path, image_dir, output_dir, g
                 logger.error(f"TRIDENT stderr:\n{stderr}")
         return process.returncode
     except FileNotFoundError:
-        logger.error(f"Error: The Python interpreter or TRIDENT script was not found. Ensure Python is in PATH and script path is correct.")
+        logger.error(f"Error: conda or Python interpreter not found. Ensure conda is in PATH.")
         logger.error(f"Attempted command: {' '.join(command)}")
         return -1
     except Exception as e:
