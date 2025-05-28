@@ -35,7 +35,7 @@ show_help() {
     echo "  -s, --test           Process only the test project (QuPath_MP_PDAC2)"
     echo "  -a, --all            Process all QuPath projects (one at a time)"
     echo "  -m, --mode MODE      Force processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
-    echo "  -q, --qupath PATH    Force specific QuPath executable path"
+    echo "  -q, --qupath PATH    Custom QuPath executable path (with compatibility checks)"
     echo "  -v, --verbose        Enable verbose logging"
     echo "  -h, --help           Show this help message"
     echo
@@ -48,7 +48,15 @@ show_help() {
     echo "  $0 -s                           # Test project with auto-detection"
     echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -m gpu"
     echo "  $0 -a -m cpu                    # All projects, force CPU"
-    echo "  $0 -s -q /custom/path/to/QuPath # Custom QuPath path"
+    echo "  $0 -s -q /custom/path/to/QuPath # Custom QuPath with compatibility check"
+    echo "  $0 -s -q /path/to/QuPath -m gpu # Custom QuPath forced to GPU mode"
+    echo
+    echo "Compatibility Checks:"
+    echo "  - Verifies QuPath executable exists and is executable"
+    echo "  - Detects QuPath version (0.5.1 vs 0.6)"
+    echo "  - Checks CUDA compatibility for GPU mode"
+    echo "  - Validates StarDist extension availability"
+    echo "  - Ensures mode compatibility with QuPath version"
     echo
     echo "Auto-detection Logic:"
     echo "  1. Check CUDA availability with nvidia-smi"
@@ -111,6 +119,34 @@ check_cuda_availability() {
     fi
 }
 
+validate_qupath_executable() {
+    local qupath_path="$1"
+    
+    verbose_log "Validating QuPath executable: $qupath_path"
+    
+    # Check if file exists
+    if [ ! -f "$qupath_path" ]; then
+        error_log "QuPath executable not found: $qupath_path"
+        return 1
+    fi
+    
+    # Check if file is executable
+    if [ ! -x "$qupath_path" ]; then
+        error_log "QuPath file is not executable: $qupath_path"
+        error_log "Try: chmod +x $qupath_path"
+        return 1
+    fi
+    
+    # Security check: ensure it's not a suspicious file
+    local file_type=$(file "$qupath_path" 2>/dev/null)
+    if [[ ! "$file_type" =~ (executable|script|text) ]]; then
+        warn_log "QuPath file type may be suspicious: $file_type"
+    fi
+    
+    verbose_log "QuPath executable validation passed"
+    return 0
+}
+
 detect_qupath_version() {
     local qupath_path="$1"
     verbose_log "Detecting QuPath version for: $qupath_path"
@@ -120,27 +156,54 @@ detect_qupath_version() {
         return 1
     fi
     
-    # Try to extract version from path or executable
+    # Method 1: Check path for version indicators
     if [[ "$qupath_path" == *"0.5.1"* ]]; then
         echo "0.5.1"
         return 0
-    elif [[ "$qupath_path" == *"0.6"* ]]; then
+    elif [[ "$qupath_path" == *"0.6"* ]] || [[ "$qupath_path" == *"0.6.0"* ]]; then
         echo "0.6"
         return 0
-    else
-        # Try to run QuPath to get version (may not work in headless mode)
-        local version_output=$("$qupath_path" --version 2>/dev/null | head -1)
+    fi
+    
+    # Method 2: Check parent directory structure
+    local qupath_dir=$(dirname "$qupath_path")
+    local parent_dir=$(dirname "$qupath_dir")
+    
+    if [[ "$parent_dir" == *"0.5.1"* ]]; then
+        echo "0.5.1"
+        return 0
+    elif [[ "$parent_dir" == *"0.6"* ]]; then
+        echo "0.6"
+        return 0
+    fi
+    
+    # Method 3: Try to run QuPath to get version (may not work in headless mode)
+    verbose_log "Attempting to get version from QuPath executable..."
+    local version_output
+    if version_output=$("$qupath_path" --version 2>/dev/null | head -1); then
         if [[ "$version_output" == *"0.5.1"* ]]; then
             echo "0.5.1"
             return 0
         elif [[ "$version_output" == *"0.6"* ]]; then
             echo "0.6"
             return 0
-        else
-            verbose_log "Could not determine QuPath version from: $qupath_path"
-            return 1
         fi
     fi
+    
+    # Method 4: Check for version-specific files in QuPath directory
+    local qupath_base_dir=$(dirname "$(dirname "$qupath_path")")
+    
+    # Look for version-specific JAR files or directories
+    if find "$qupath_base_dir" -name "*0.5.1*" -type f 2>/dev/null | grep -q .; then
+        echo "0.5.1"
+        return 0
+    elif find "$qupath_base_dir" -name "*0.6*" -type f 2>/dev/null | grep -q .; then
+        echo "0.6"
+        return 0
+    fi
+    
+    verbose_log "Could not determine QuPath version from: $qupath_path"
+    return 1
 }
 
 determine_optimal_configuration() {
@@ -180,6 +243,152 @@ determine_optimal_configuration() {
         error_log "No suitable QuPath installation found"
         return 1
     fi
+}
+
+check_stardist_extension() {
+    local qupath_path="$1"
+    local qupath_version="$2"
+    
+    verbose_log "Checking StarDist extension availability for QuPath $qupath_version"
+    
+    local qupath_base_dir=$(dirname "$(dirname "$qupath_path")")
+    local stardist_found=false
+    
+    # Version-specific StarDist extension checks
+    case "$qupath_version" in
+        "0.5.1")
+            # For QuPath 0.5.1, look for StarDist in lib directories
+            local search_dirs=(
+                "$qupath_base_dir/lib"
+                "$qupath_base_dir/lib/app"
+                "$qupath_base_dir/extensions"
+            )
+            ;;
+        "0.6")
+            # For QuPath 0.6, look for StarDist 0.6.0-rc1
+            local search_dirs=(
+                "$qupath_base_dir/lib"
+                "$qupath_base_dir/lib/app"
+                "$qupath_base_dir/extensions"
+            )
+            ;;
+        *)
+            warn_log "Unknown QuPath version for StarDist check: $qupath_version"
+            return 1
+            ;;
+    esac
+    
+    # Search for StarDist JAR files
+    for search_dir in "${search_dirs[@]}"; do
+        if [ -d "$search_dir" ]; then
+            if find "$search_dir" -name "*stardist*.jar" 2>/dev/null | grep -q .; then
+                local stardist_jar=$(find "$search_dir" -name "*stardist*.jar" | head -1)
+                verbose_log "Found StarDist extension: $stardist_jar"
+                stardist_found=true
+                break
+            fi
+        fi
+    done
+    
+    if [ "$stardist_found" = false ]; then
+        error_log "StarDist extension not found for QuPath $qupath_version"
+        error_log "Please install StarDist extension or use a QuPath build with StarDist included"
+        return 1
+    fi
+    
+    verbose_log "StarDist extension validation passed"
+    return 0
+}
+
+validate_mode_compatibility() {
+    local qupath_version="$1"
+    local requested_mode="$2"
+    local cuda_available="$3"
+    
+    verbose_log "Validating mode compatibility: QuPath $qupath_version, mode $requested_mode, CUDA $cuda_available"
+    
+    case "$requested_mode" in
+        "gpu")
+            if [ "$qupath_version" != "0.5.1" ]; then
+                error_log "GPU mode requires QuPath 0.5.1, but detected version: $qupath_version"
+                error_log "Use QuPath 0.5.1 for GPU acceleration or switch to CPU mode"
+                return 1
+            fi
+            
+            if [ "$cuda_available" != "true" ]; then
+                warn_log "GPU mode requested but CUDA not available"
+                warn_log "Processing may fall back to CPU within QuPath"
+            fi
+            ;;
+        "cpu")
+            if [ "$qupath_version" != "0.6" ]; then
+                warn_log "CPU mode optimized for QuPath 0.6, but detected version: $qupath_version"
+                warn_log "Processing will continue but may not be optimally configured"
+            fi
+            ;;
+        "auto")
+            # Auto mode is always compatible, but we'll provide recommendations
+            if [ "$qupath_version" = "0.5.1" ] && [ "$cuda_available" = "true" ]; then
+                verbose_log "Auto mode: QuPath 0.5.1 + CUDA detected, will use GPU mode"
+            elif [ "$qupath_version" = "0.6" ]; then
+                verbose_log "Auto mode: QuPath 0.6 detected, will use CPU mode"
+            else
+                verbose_log "Auto mode: Using detected configuration"
+            fi
+            ;;
+        *)
+            error_log "Invalid processing mode: $requested_mode"
+            return 1
+            ;;
+    esac
+    
+    verbose_log "Mode compatibility validation passed"
+    return 0
+}
+
+comprehensive_qupath_validation() {
+    local qupath_path="$1"
+    local requested_mode="$2"
+    local cuda_available="$3"
+    
+    log "Performing comprehensive QuPath validation..."
+    
+    # Step 1: Basic executable validation
+    if ! validate_qupath_executable "$qupath_path"; then
+        return 1
+    fi
+    
+    # Step 2: Version detection
+    local detected_version
+    if ! detected_version=$(detect_qupath_version "$qupath_path"); then
+        error_log "Could not detect QuPath version for: $qupath_path"
+        error_log "Please ensure you're using a supported QuPath version (0.5.1 or 0.6)"
+        return 1
+    fi
+    
+    log "Detected QuPath version: $detected_version"
+    
+    # Step 3: StarDist extension check
+    if ! check_stardist_extension "$qupath_path" "$detected_version"; then
+        return 1
+    fi
+    
+    # Step 4: Mode compatibility validation
+    if ! validate_mode_compatibility "$detected_version" "$requested_mode" "$cuda_available"; then
+        return 1
+    fi
+    
+    # Step 5: Set global variables for later use
+    DETECTED_QUPATH_VERSION="$detected_version"
+    VALIDATED_QUPATH_PATH="$qupath_path"
+    
+    log "✅ QuPath validation completed successfully"
+    log "   Path: $qupath_path"
+    log "   Version: $detected_version"
+    log "   Mode: $requested_mode"
+    log "   CUDA: $cuda_available"
+    
+    return 0
 }
 
 setup_processing_environment() {
@@ -295,48 +504,71 @@ clear
 echo -e "\033[1;35m===============================================\033[0m"
 echo -e "\033[1;35m     PANK Thesis - Unified StarDist Pipeline   \033[0m"
 echo -e "\033[1;35m     Automatic CPU/GPU Detection & Selection   \033[0m"
+echo -e "\033[1;35m     With Comprehensive Compatibility Checks   \033[0m"
 echo -e "\033[1;35m===============================================\033[0m"
 echo
 
 log "Starting unified StarDist cell segmentation pipeline"
 log "Force mode: $FORCE_MODE"
+log "Custom QuPath: ${CUSTOM_QUPATH_PATH:-'Not specified'}"
 log "Verbose logging: $VERBOSE"
 
-# Determine processing configuration
-if [ "$FORCE_MODE" = "auto" ]; then
-    SELECTED_MODE=$(determine_optimal_configuration)
-    if [ $? -ne 0 ]; then
-        error_log "Failed to determine optimal configuration"
-        exit 1
-    fi
-else
-    SELECTED_MODE="$FORCE_MODE"
-    log "Using forced mode: $SELECTED_MODE"
+# Check CUDA availability first
+CUDA_AVAILABLE=false
+if check_cuda_availability; then
+    CUDA_AVAILABLE=true
 fi
 
-# Handle custom QuPath path
+# Handle custom QuPath path with comprehensive validation
 if [ -n "$CUSTOM_QUPATH_PATH" ]; then
-    if [ ! -f "$CUSTOM_QUPATH_PATH" ] || [ ! -x "$CUSTOM_QUPATH_PATH" ]; then
-        error_log "Custom QuPath path not found or not executable: $CUSTOM_QUPATH_PATH"
+    log "Validating custom QuPath installation..."
+    
+    if ! comprehensive_qupath_validation "$CUSTOM_QUPATH_PATH" "$FORCE_MODE" "$CUDA_AVAILABLE"; then
+        error_log "Custom QuPath validation failed"
         exit 1
     fi
     
-    # Override based on detected version
-    detected_version=$(detect_qupath_version "$CUSTOM_QUPATH_PATH")
-    if [ $? -eq 0 ]; then
-        case "$detected_version" in
-            "0.5.1")
-                QUPATH_051_PATH="$CUSTOM_QUPATH_PATH"
-                QUPATH_051_DIR="$(dirname "$(dirname "$CUSTOM_QUPATH_PATH")")"
-                ;;
-            "0.6")
-                QUPATH_06_PATH="$CUSTOM_QUPATH_PATH"
-                QUPATH_06_DIR="$(dirname "$(dirname "$CUSTOM_QUPATH_PATH")")"
-                ;;
-        esac
-        log "Using custom QuPath $detected_version: $CUSTOM_QUPATH_PATH"
+    # Override the detected configuration with validated custom path
+    case "$DETECTED_QUPATH_VERSION" in
+        "0.5.1")
+            QUPATH_051_PATH="$CUSTOM_QUPATH_PATH"
+            QUPATH_051_DIR="$(dirname "$(dirname "$CUSTOM_QUPATH_PATH")")"
+            log "Using validated custom QuPath 0.5.1: $CUSTOM_QUPATH_PATH"
+            ;;
+        "0.6")
+            QUPATH_06_PATH="$CUSTOM_QUPATH_PATH"
+            QUPATH_06_DIR="$(dirname "$(dirname "$CUSTOM_QUPATH_PATH")")"
+            log "Using validated custom QuPath 0.6: $CUSTOM_QUPATH_PATH"
+            ;;
+    esac
+    
+    # If mode is auto, determine based on validated QuPath version
+    if [ "$FORCE_MODE" = "auto" ]; then
+        if [ "$DETECTED_QUPATH_VERSION" = "0.5.1" ] && [ "$CUDA_AVAILABLE" = true ]; then
+            SELECTED_MODE="gpu"
+            log "Auto-selected GPU mode based on custom QuPath 0.5.1 + CUDA"
+        elif [ "$DETECTED_QUPATH_VERSION" = "0.6" ]; then
+            SELECTED_MODE="cpu"
+            log "Auto-selected CPU mode based on custom QuPath 0.6"
+        else
+            SELECTED_MODE="gpu"
+            warn_log "Auto-selected GPU mode with custom QuPath (CUDA may not be optimal)"
+        fi
     else
-        warn_log "Could not detect version of custom QuPath, using as-is"
+        SELECTED_MODE="$FORCE_MODE"
+        log "Using forced mode: $SELECTED_MODE with validated custom QuPath"
+    fi
+else
+    # Original auto-detection logic for default paths
+    if [ "$FORCE_MODE" = "auto" ]; then
+        SELECTED_MODE=$(determine_optimal_configuration)
+        if [ $? -ne 0 ]; then
+            error_log "Failed to determine optimal configuration"
+            exit 1
+        fi
+    else
+        SELECTED_MODE="$FORCE_MODE"
+        log "Using forced mode: $SELECTED_MODE"
     fi
 fi
 
