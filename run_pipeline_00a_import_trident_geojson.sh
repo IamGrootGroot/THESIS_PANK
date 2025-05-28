@@ -36,6 +36,7 @@ show_help() {
     echo "Options:"
     echo "  -t, --trident PATH    Path to TRIDENT output base directory"
     echo "  -p, --project PATH    Path to specific QuPath project (.qpproj)"
+    echo "  -q, --qupath PATH     Path to QuPath executable (optional)"
     echo "  -a, --all             Process all QuPath projects in current directory"
     echo "  -s, --test            Process only the test project (QuPath_MP_PDAC5)"
     echo "  -h, --help           Show this help message"
@@ -44,8 +45,10 @@ show_help() {
     echo "  $0 -t ./trident_output/contours_geoJSON -s                    # Test project only"
     echo "  $0 -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100/project.qpproj"
     echo "  $0 -t ./trident_output/contours_geoJSON -a                    # All projects"
+    echo "  $0 -t ./trident_output -q /path/to/QuPath -p project.qpproj   # Custom QuPath"
     echo
     echo "Note: TRIDENT output directory is required."
+    echo "      If QuPath path not specified, uses default from script configuration."
     exit 1
 }
 
@@ -109,6 +112,7 @@ exec 2> >(tee -a "$LOG_FILE" "$ERROR_LOG" >&2)
 # Initialize variables
 TRIDENT_DIR=""
 PROJECT_PATH=""
+CUSTOM_QUPATH_PATH=""
 PROCESS_ALL=false
 TEST_ONLY=false
 
@@ -121,6 +125,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--project)
             PROJECT_PATH="$2"
+            shift 2
+            ;;
+        -q|--qupath)
+            CUSTOM_QUPATH_PATH="$2"
             shift 2
             ;;
         -a|--all)
@@ -187,6 +195,31 @@ fi
 # Convert to absolute path for QuPath
 TRIDENT_DIR=$(realpath "$TRIDENT_DIR")
 log "Using absolute TRIDENT path: $TRIDENT_DIR"
+
+# =============================================================================
+# QuPath Path Configuration
+# =============================================================================
+# Use custom QuPath path if provided, otherwise use default
+if [ -n "$CUSTOM_QUPATH_PATH" ]; then
+    QUPATH_PATH="$CUSTOM_QUPATH_PATH"
+    log "Using custom QuPath path: $QUPATH_PATH"
+else
+    # Use default QuPath path from script configuration
+    log "Using default QuPath path: $QUPATH_PATH"
+fi
+
+# Validate QuPath installation
+if [ ! -f "$QUPATH_PATH" ]; then
+    error_log "QuPath not found at $QUPATH_PATH"
+    if [ -n "$CUSTOM_QUPATH_PATH" ]; then
+        error_log "Custom QuPath path is invalid"
+    else
+        error_log "Please set the correct path in the script or use -q option"
+    fi
+    exit 1
+fi
+
+log "QuPath executable validated: $QUPATH_PATH"
 
 # =============================================================================
 # Function to Process a Single Project
