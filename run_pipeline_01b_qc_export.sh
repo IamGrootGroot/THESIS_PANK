@@ -28,6 +28,7 @@ show_help() {
     echo "  -a            Export QC for all QuPath projects"
     echo "  -s            Export QC for test project only (QuPath_MP_PDAC5)"
     echo "  -o DIR        Output directory for QC thumbnails (default: $QC_OUTPUT_DIR)"
+    echo "  -t DIR        Upload existing thumbnails directory (skip export)"
     echo "  -u            Upload to Google Drive after export"
     echo "  -h            Show this help message"
     echo ""
@@ -37,11 +38,13 @@ show_help() {
     echo "  $0 -a -u                        # All projects with upload"
     echo "  $0 -s -o custom_qc_dir -u       # Custom output dir with upload"
     echo "  $0 -p project.qpproj -q /path/to/QuPath  # Custom QuPath path"
+    echo "  $0 -t /path/to/thumbnails -u    # Upload existing thumbnails only"
     echo ""
     echo "Note: For Google Drive upload, ensure you have:"
     echo "      - drive_credentials.json"
     echo "      - token.json (generated with generate_drive_token.py)"
     echo "      If QuPath path not specified, uses default configuration."
+    echo "      Use -t to upload existing thumbnails without generating new ones."
     exit 1
 }
 
@@ -64,15 +67,17 @@ error_log() {
 PROJECT_PATH=""
 PROCESS_ALL=false
 TEST_ONLY=false
+UPLOAD_EXISTING_DIR=""
 UPLOAD_TO_DRIVE=false
 
-while getopts "p:q:aso:uh" opt; do
+while getopts "p:q:aso:t:uh" opt; do
     case $opt in
         p) PROJECT_PATH="$OPTARG" ;;
         q) DEFAULT_QUPATH_PATH="$OPTARG" ;;
         a) PROCESS_ALL=true ;;
         s) TEST_ONLY=true ;;
         o) QC_OUTPUT_DIR="$OPTARG" ;;
+        t) UPLOAD_EXISTING_DIR="$OPTARG" ;;
         u) UPLOAD_TO_DRIVE=true ;;
         h) show_help ;;
         *) show_help ;;
@@ -84,10 +89,23 @@ mode_count=0
 [ "$PROCESS_ALL" = true ] && ((mode_count++))
 [ "$TEST_ONLY" = true ] && ((mode_count++))
 [ -n "$PROJECT_PATH" ] && ((mode_count++))
+[ -n "$UPLOAD_EXISTING_DIR" ] && ((mode_count++))
 
 if [ "$mode_count" -ne 1 ]; then
-    error_log "Please specify exactly one processing mode: -a, -s, or -p"
+    error_log "Please specify exactly one processing mode: -a, -s, -p, or -t"
     show_help
+fi
+
+# If upload-only mode, validate the directory exists
+if [ -n "$UPLOAD_EXISTING_DIR" ]; then
+    if [ ! -d "$UPLOAD_EXISTING_DIR" ]; then
+        error_log "Upload directory not found: $UPLOAD_EXISTING_DIR"
+        exit 1
+    fi
+    if [ "$UPLOAD_TO_DRIVE" != true ]; then
+        error_log "Upload-only mode (-t) requires -u flag to upload to Google Drive"
+        exit 1
+    fi
 fi
 
 # Initialize
@@ -161,7 +179,14 @@ failed_exports=0
 start_time=$(date +%s)
 qc_directories=()
 
-if [ "$TEST_ONLY" = true ]; then
+if [ -n "$UPLOAD_EXISTING_DIR" ]; then
+    # Upload-only mode: use existing thumbnails directory
+    log "Upload-only mode: using existing thumbnails directory"
+    log "Thumbnails directory: $UPLOAD_EXISTING_DIR"
+    qc_directories+=("$UPLOAD_EXISTING_DIR")
+    successful_exports=1
+    
+elif [ "$TEST_ONLY" = true ]; then
     # Process test project only
     log "Processing test project only (QuPath_MP_PDAC5)"
     if qc_dir=$(export_qc_for_project "QuPath_MP_PDAC5/project.qpproj"); then
