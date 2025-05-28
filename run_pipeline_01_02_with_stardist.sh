@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Enhanced pipeline script that includes StarDist in classpath
-STARDIST_JAR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
-QUPATH_CLASSPATH="$STARDIST_JAR:/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/lib/app/*"
+STARDIST_JAR="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
+QUPATH_CLASSPATH="$STARDIST_JAR:/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/lib/app/*"
 
 # Run StarDist cell detection
 java -cp "$QUPATH_CLASSPATH" qupath.QuPath script \

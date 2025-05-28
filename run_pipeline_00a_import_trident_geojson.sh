@@ -14,7 +14,7 @@
 # =============================================================================
 # Default QuPath path (can be overridden with -q option)
 # Update this path to match your most common QuPath installation
-DEFAULT_QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath}"
+DEFAULT_QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath}"
 
 # =============================================================================
 # Help Function

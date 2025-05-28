@@ -13,7 +13,7 @@
 # Default QuPath Configuration
 # =============================================================================
 # Default QuPath path (can be overridden with -q option)
-DEFAULT_QUPATH_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath"
+DEFAULT_QUPATH_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
 
 # Configuration
 QC_OUTPUT_DIR="qc_cell_detection_thumbnails"

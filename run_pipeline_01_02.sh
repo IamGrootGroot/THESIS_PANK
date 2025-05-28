@@ -14,7 +14,7 @@
 # =============================================================================
 # Common QuPath installation paths on Linux servers
 QUPATH_PATHS=(
-    "/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/qupath-app/build/install/QuPath-0.5.1/bin/QuPath-0.5.1"
+    "/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
     "/opt/QuPath/bin/QuPath"
     "/usr/local/bin/QuPath"
     "/home/pellouxp/QuPath/bin/QuPath"

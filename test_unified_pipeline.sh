@@ -92,9 +92,9 @@ echo
 # Test QuPath installations
 echo "Testing QuPath installations..."
 
-# Default paths (update these to match your server paths)
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/qupath-app/build/install/QuPath-0.5.1/bin/QuPath-0.5.1"
+# QuPath Installation Paths (same as unified pipeline)
+QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
 
 # Function to detect QuPath version
 detect_qupath_version() {

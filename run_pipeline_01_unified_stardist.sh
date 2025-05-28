@@ -13,13 +13,13 @@
 # QuPath Installation Paths Configuration
 # =============================================================================
 # QuPath 0.6 (CPU-optimized build with StarDist 0.6.0-rc1)
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_06_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath"
+QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_06_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath"
 STARDIST_06_JAR="$QUPATH_06_DIR/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
 
 # QuPath 0.5.1 (GPU-enabled build)
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/qupath-app/build/install/QuPath-0.5.1/bin/QuPath-0.5.1"
-QUPATH_051_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/qupath-app/build/install/QuPath-0.5.1"
+QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_051_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath"
 
 # Model path
 MODEL_PATH="/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"

@@ -239,6 +239,138 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Quick Start Guide
+
+This section provides concrete examples for running the complete pipeline from start to finish.
+
+#### **Step 0: Test Your Setup**
+
+Before running the pipeline, test your configuration to ensure everything is properly set up:
+
+```bash
+# Test with default QuPath installations
+./test_unified_pipeline.sh -v
+
+# Test with your specific QuPath installation
+./test_unified_pipeline.sh -q /u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath -v
+
+# Test with QuPath 0.6 (CPU)
+./test_unified_pipeline.sh -q /u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath -v
+```
+
+The test script will show you:
+- ✅ CUDA availability and GPU information
+- ✅ QuPath installations and versions detected
+- ✅ StarDist extension availability
+- ✅ Model file location
+- 🚀 **Recommended commands** based on your setup
+
+#### **Step 1: Complete Pipeline Example (Recommended)**
+
+Based on your test results, use the recommended commands. Here are typical scenarios:
+
+##### **Scenario A: GPU Server with A6000 (Recommended for Performance)**
+```bash
+# 1. Test first with GPU QuPath
+./run_pipeline_01_unified_stardist.sh -s -q /u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath -m gpu -v
+
+# 2. If test succeeds, run all projects
+./run_pipeline_01_unified_stardist.sh -a -q /u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath -m gpu -v
+
+# 3. Export QC thumbnails
+./run_pipeline_01_unified_qc_export.sh -a -q /u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath -m gpu -u -v
+```
+
+##### **Scenario B: CPU Server (128-core optimized)**
+```bash
+# 1. Test first with CPU QuPath
+./run_pipeline_01_unified_stardist.sh -s -q /u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath -m cpu -v
+
+# 2. If test succeeds, run all projects
+./run_pipeline_01_unified_stardist.sh -a -q /u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath -m cpu -v
+
+# 3. Export QC thumbnails
+./run_pipeline_01_unified_qc_export.sh -a -q /u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath -m cpu -u -v
+```
+
+##### **Scenario C: Auto-Detection (Simplest)**
+```bash
+# 1. Test with automatic detection
+./run_pipeline_01_unified_stardist.sh -s -v
+
+# 2. Run all projects with auto-detection
+./run_pipeline_01_unified_stardist.sh -a -v
+
+# 3. Export QC thumbnails
+./run_pipeline_01_unified_qc_export.sh -a -u -v
+```
+
+#### **Step 2: Feature Extraction**
+```bash
+# Extract features using UNI2-h model
+./run_pipeline_03.sh \
+    -i output/tiles \
+    -o features_embeddings.csv \
+    -t YOUR_HUGGINGFACE_TOKEN \
+    -b 32 \
+    -w 4
+```
+
+#### **Step 3: UMAP and Clustering**
+```bash
+# Generate 3D UMAP visualization with clustering
+python 04_05_umap_3d_kmeans30.py \
+    --input_csv features_embeddings.csv \
+    --output_dir results/
+```
+
+### **Enhanced Pipeline Features**
+
+#### **Custom QuPath Path Support**
+All pipeline scripts now support custom QuPath installations:
+
+```bash
+# Use specific QuPath installation
+./run_pipeline_01_unified_stardist.sh -s -q /path/to/your/QuPath -m gpu
+
+# The script will automatically:
+# ✅ Validate the executable exists and is runnable
+# ✅ Detect QuPath version (0.5.1 vs 0.6)
+# ✅ Check StarDist extension availability
+# ✅ Verify CUDA compatibility for GPU mode
+# ✅ Ensure mode compatibility with QuPath version
+```
+
+#### **Comprehensive Compatibility Checks**
+The pipeline includes built-in validation:
+
+```bash
+# Example validation output:
+# ✅ QuPath executable is valid
+# ✅ Detected QuPath version: 0.5.1
+# ✅ StarDist extension found
+# ✅ CUDA is available
+# ✅ Perfect GPU setup: QuPath 0.5.1 + CUDA
+# 🚀 Recommended: ./run_pipeline_01_unified_stardist.sh -q '/path/to/QuPath' -m gpu -s
+```
+
+#### **Error Handling and Troubleshooting**
+The enhanced pipeline provides clear error messages:
+
+```bash
+# Example error scenarios and solutions:
+# ❌ "GPU mode requires QuPath 0.5.1, but detected version: 0.6"
+#    → Solution: Use -m cpu or switch to QuPath 0.5.1
+
+# ❌ "StarDist extension not found for QuPath 0.6"
+#    → Solution: Install StarDist extension or use pre-configured QuPath
+
+# ⚠️  "GPU mode requested but CUDA not available"
+#    → Solution: Install CUDA drivers or use -m cpu
+```
+
+### Detailed Step-by-Step Instructions
+
 ### Step 0a: Run TRIDENT Tissue Segmentation (Python Script)
 
 This script processes all whole-slide images in a specified input directory using TRIDENT to generate tissue segmentation GeoJSON files. This step should be run **before** importing into QuPath or running the main QuPath pipeline.

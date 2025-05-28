@@ -10,7 +10,7 @@
 # =============================================================================
 
 # QuPath Configuration
-QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build/qupath/build/dist/QuPath/bin/QuPath}"
+QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath}"
 
 # Help function
 show_help() {
@@ -122,7 +122,7 @@ process_project() {
     fi
     
     # Ensure StarDist extension is available in main lib directory for headless mode
-    QUPATH_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath"
+    QUPATH_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath"
     STARDIST_JAR="$QUPATH_DIR/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
     MAIN_LIB_DIR="$QUPATH_DIR/lib"
     
