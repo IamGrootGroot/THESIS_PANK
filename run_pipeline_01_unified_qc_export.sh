@@ -432,11 +432,14 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
                 project_name=$(basename "$qc_dir")
                 log "Uploading QC thumbnails for $project_name..."
                 
+                verbose_log "Running upload command: python3 $UPLOAD_SCRIPT --qc_thumbnails_dir $qc_dir --folder_name Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP} --credentials_file $TOKEN_PATH --token_file $TOKEN_PATH"
+                
                 if python3 "$UPLOAD_SCRIPT" \
                     --qc_thumbnails_dir "$qc_dir" \
                     --folder_name "Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP}" \
                     --credentials_file "$TOKEN_PATH" \
-                    --token_file "$TOKEN_PATH"; then
+                    --token_file "$TOKEN_PATH" \
+                    >> "$LOG_FILE" 2>&1; then
                     log "Successfully uploaded QC thumbnails for $project_name"
                 else
                     error_log "Failed to upload QC thumbnails for $project_name"
