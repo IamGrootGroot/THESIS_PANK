@@ -105,17 +105,79 @@ python upload_contours_to_drive.py \
 - Token refresh is handled automatically
 - Only requested scopes are used (file creation and upload)
 
-### 1. Cell Segmentation and Tile Extraction (Steps 1-2)
-- Uses QuPath and StarDist for cell segmentation **within the TRIDENT-defined tissue regions** (annotations with class "Tissue (TRIDENT)").
-- **Optimized for high-performance CPU processing (128-core server)** due to QuPath GPU incompatibility issues
-- **StarDist configuration optimized for parallel CPU processing:**
-  - Tile size: 1024px (optimal for CPU processing)
-  - Max image dimension: 16384px (leveraging CPU power)
-  - Parallel processing enabled for 128-core server
-  - Batch size: 4 (balanced for CPU efficiency)
-- Extracts 224x224 pixel tiles around detected cells.
-- Implemented in Groovy scripts for QuPath
-- Automated via `run_pipeline_01_02_with_stardist.sh`
+### 1. Cell Segmentation and Tile Extraction (Steps 1-2) - UNIFIED APPROACH
+
+The pipeline now features a **unified cell segmentation system** that automatically detects your QuPath installation and CUDA availability to choose the optimal processing configuration:
+
+#### **Automatic Configuration Detection:**
+- **GPU Mode**: QuPath 0.5.1 + CUDA available → GPU-accelerated processing
+- **CPU Mode**: QuPath 0.6 + 128-core server → CPU-optimized processing
+
+#### **Key Features:**
+- **Intelligent Auto-Detection**: Automatically selects best configuration based on available hardware
+- **Dual QuPath Support**: Compatible with both QuPath 0.5.1 (GPU) and 0.6 (CPU) builds
+- **Performance Optimization**: 
+  - **GPU Mode**: maxDimension=8192, optimized for CUDA acceleration
+  - **CPU Mode**: maxDimension=16384, optimized for 128-core parallel processing
+- **TRIDENT Integration**: Processes cells **only within TRIDENT-defined tissue regions**
+- **Comprehensive QC**: Unified QC export compatible with both processing modes
+
+#### **Usage Examples:**
+
+##### **Automatic Mode (Recommended):**
+```bash
+# Test project with auto-detection
+./run_pipeline_01_unified_stardist.sh -s
+
+# All projects with automatic configuration
+./run_pipeline_01_unified_stardist.sh -a
+```
+
+##### **Force Specific Mode:**
+```bash
+# Force GPU processing
+./run_pipeline_01_unified_stardist.sh -s -m gpu
+
+# Force CPU processing for 128-core server
+./run_pipeline_01_unified_stardist.sh -a -m cpu
+
+# Custom QuPath installation
+./run_pipeline_01_unified_stardist.sh -s -q /custom/path/to/QuPath
+```
+
+##### **Quality Control Export:**
+```bash
+# QC export with auto-detection
+./run_pipeline_01_unified_qc_export.sh -s
+
+# QC export with specific mode and Google Drive upload
+./run_pipeline_01_unified_qc_export.sh -a -m gpu -u
+```
+
+#### **Configuration Details:**
+
+**GPU Mode (QuPath 0.5.1):**
+- CUDA acceleration enabled
+- maxDimension: 8192 (optimal for GPU memory)
+- Faster processing for compatible hardware
+- Requires NVIDIA GPU with CUDA drivers
+
+**CPU Mode (QuPath 0.6):**
+- 128-core server optimization
+- maxDimension: 16384 (leveraging high CPU core count)
+- Parallel processing enabled
+- Optimized for high-core-count servers
+
+#### **Legacy Scripts (Still Available):**
+- `run_pipeline_01a_batch_stardist.sh` - Original CPU-only approach
+- `run_pipeline_01b_qc_export.sh` - Original QC export
+- Individual Groovy scripts for specific configurations
+
+#### **Performance Benefits:**
+- **Automatic optimization** based on available hardware
+- **Consistent interface** regardless of underlying QuPath version
+- **Comprehensive logging** with performance metrics
+- **Error handling** and fallback mechanisms
 
 ### 2. Feature Extraction (Step 3)
 - Uses UNI2-h model from HuggingFace for feature extraction
@@ -352,26 +414,73 @@ Uploads are organized in folders:
 
 This QC workflow enables efficient visual validation of TRIDENT tissue segmentations across large datasets before proceeding with the main analysis pipeline.
 
-### Step 1 & 2: Running Cell Segmentation and Tile Extraction (QuPath pipeline)
+### Step 1 & 2: Running Cell Segmentation and Tile Extraction (Unified Pipeline)
 
-After importing TRIDENT annotations, run the optimized pipeline script. StarDist is now configured for high-performance CPU processing (optimized for 128-core servers) due to QuPath GPU compatibility issues.
+After importing TRIDENT annotations, use the **new unified pipeline** that automatically detects your QuPath installation and CUDA availability:
 
+#### **Recommended Approach (Automatic Detection):**
 ```bash
-chmod +x run_pipeline_01_02_with_stardist.sh
-./run_pipeline_01_02_with_stardist.sh QuPath_MP_PDAC5/project.qpproj
+# Test project with automatic configuration detection
+./run_pipeline_01_unified_stardist.sh -s
+
+# Process all projects with automatic optimization
+./run_pipeline_01_unified_stardist.sh -a
+
+# Single project with verbose logging
+./run_pipeline_01_unified_stardist.sh -p QuPath_MP_PDAC100/project.qpproj -v
 ```
 
-**Performance Optimizations for 128-core CPU:**
-- **Parallel processing enabled**: Leverages all 128 CPU cores
-- **Large tile processing**: 1024px tiles for efficient CPU utilization
-- **High-resolution support**: Up to 16384px max image dimensions
-- **Optimized batch size**: 4 tiles per batch for balanced memory usage
+#### **Manual Configuration (if needed):**
+```bash
+# Force GPU processing (QuPath 0.5.1 + CUDA)
+./run_pipeline_01_unified_stardist.sh -a -m gpu
 
-This will:
-- Process all images already added to the QuPath project
-- Perform cell segmentation using StarDist **within TRIDENT tissue regions only**
-- Extract 224x224 pixel tiles around detected cells
-- Save logs in the `logs/` directory
+# Force CPU processing (QuPath 0.6 + 128-core optimization)
+./run_pipeline_01_unified_stardist.sh -a -m cpu
+
+# Use custom QuPath installation
+./run_pipeline_01_unified_stardist.sh -s -q /custom/path/to/QuPath
+```
+
+#### **What the Unified Pipeline Does:**
+1. **Auto-detects** available QuPath installations (0.5.1 and 0.6)
+2. **Checks CUDA availability** using nvidia-smi
+3. **Selects optimal configuration**:
+   - GPU mode: QuPath 0.5.1 + CUDA → maxDimension=8192, GPU acceleration
+   - CPU mode: QuPath 0.6 → maxDimension=16384, 128-core optimization
+4. **Processes all images** in the QuPath project
+5. **Performs cell segmentation** using StarDist within TRIDENT tissue regions only
+6. **Extracts 224x224 pixel tiles** around detected cells
+7. **Saves comprehensive logs** with performance metrics
+
+#### **Quality Control Export:**
+```bash
+# QC export with automatic configuration
+./run_pipeline_01_unified_qc_export.sh -s
+
+# QC export with Google Drive upload
+./run_pipeline_01_unified_qc_export.sh -a -u
+
+# QC export with specific mode
+./run_pipeline_01_unified_qc_export.sh -s -m gpu -u -v
+```
+
+#### **Legacy Scripts (Still Available):**
+For specific use cases, the original scripts remain available:
+```bash
+# Original CPU-only approach
+./run_pipeline_01a_batch_stardist.sh -s
+
+# Original QC export
+./run_pipeline_01b_qc_export.sh -s -u
+```
+
+#### **Performance Benefits:**
+- **GPU Mode**: Significant speedup with CUDA acceleration
+- **CPU Mode**: Optimized for 128-core servers with parallel processing
+- **Automatic optimization** based on available hardware
+- **Consistent interface** regardless of underlying configuration
+- **Comprehensive logging** with performance metrics and timing information
 
 ### Running Feature Extraction
 ```bash
