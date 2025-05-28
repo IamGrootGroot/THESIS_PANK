@@ -21,15 +21,6 @@ println "=== GPU-Optimized StarDist Cell Segmentation ==="
 println "QuPath 0.5.1 - CUDA GPU Acceleration"
 println "StarDist2D class loaded: ${StarDist2D.class.name}"
 
-// Check GPU availability
-try {
-    // Try to detect CUDA availability through system properties or environment
-    def cudaAvailable = System.getProperty("cuda.available") ?: "unknown"
-    println "CUDA availability: ${cudaAvailable}"
-} catch (Exception e) {
-    println "Could not check CUDA availability: ${e.getMessage()}"
-}
-
 // Model path (server location)
 def pathModel = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 println "Model path: ${pathModel}"

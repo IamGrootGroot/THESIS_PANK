@@ -640,9 +640,25 @@ process_project() {
             ;;
             
         "GPU")
-            # GPU mode: QuPath 0.5.1 with GPU acceleration
+            # GPU mode: QuPath 0.5.1 with GPU acceleration and StarDist extension setup
+            local main_lib_dir="$SELECTED_QUPATH_DIR/lib"
+            local stardist_051_jar="$SELECTED_QUPATH_DIR/lib/app/qupath-extension-stardist-0.5.0.jar"
+            
+            # Copy StarDist extension to main lib directory for headless loading
+            if [ ! -f "$main_lib_dir/qupath-extension-stardist-0.5.0.jar" ]; then
+                if [ -f "$stardist_051_jar" ]; then
+                    cp "$stardist_051_jar" "$main_lib_dir/"
+                    verbose_log "Copied StarDist extension to main lib directory for GPU mode"
+                else
+                    error_log "StarDist extension not found for GPU mode: $stardist_051_jar"
+                    return 1
+                fi
+            fi
+            
+            # Run with GPU-accelerated settings and explicit classpath
             verbose_log "Running StarDist cell segmentation (GPU mode) for $project_name"
-            if "$SELECTED_QUPATH_PATH" script \
+            if JAVA_OPTS="-Djava.class.path=$SELECTED_QUPATH_DIR/lib/*:$SELECTED_QUPATH_DIR/lib/app/*" \
+               "$SELECTED_QUPATH_PATH" script \
                     --project="$project_file" \
                     "$CELL_SEG_SCRIPT_PATH" \
                     >> "$QUPATH_LOG" 2>&1; then
