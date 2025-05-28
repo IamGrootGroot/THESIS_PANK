@@ -78,10 +78,11 @@ def totalCellsDetected = 0
 def totalTridentAnnotations = 0
 
 project.getImageList().eachWithIndex { entry, index ->
+    def imageName = "Unknown"  // Declare outside try block
     try {
         def imageData = entry.readImageData()
         def server = imageData.getServer()
-        def imageName = GeneralTools.stripExtension(server.getMetadata().getName())
+        imageName = GeneralTools.stripExtension(server.getMetadata().getName())
         
         println "Processing (${index + 1}/${project.getImageList().size()}): ${imageName}"
         
@@ -182,9 +183,10 @@ project.getImageList().eachWithIndex { entry, index ->
             nucleusDetections.each { detection ->
                 def roi = detection.getROI()
                 if (roi != null) {
-                    def centroid = roi.getCentroidXY()
-                    def x = (centroid.getX() / downsample) - CELL_RADIUS
-                    def y = (centroid.getY() / downsample) - CELL_RADIUS
+                    def centroidX = roi.getCentroidX()
+                    def centroidY = roi.getCentroidY()
+                    def x = (centroidX / downsample) - CELL_RADIUS
+                    def y = (centroidY / downsample) - CELL_RADIUS
                     def circle = new Ellipse2D.Double(x, y, CELL_RADIUS * 2, CELL_RADIUS * 2)
                     g2d.fill(circle)
                 }
@@ -195,9 +197,10 @@ project.getImageList().eachWithIndex { entry, index ->
             otherDetections.each { detection ->
                 def roi = detection.getROI()
                 if (roi != null) {
-                    def centroid = roi.getCentroidXY()
-                    def x = (centroid.getX() / downsample) - CELL_RADIUS
-                    def y = (centroid.getY() / downsample) - CELL_RADIUS
+                    def centroidX = roi.getCentroidX()
+                    def centroidY = roi.getCentroidY()
+                    def x = (centroidX / downsample) - CELL_RADIUS
+                    def y = (centroidY / downsample) - CELL_RADIUS
                     def circle = new Ellipse2D.Double(x, y, CELL_RADIUS * 2, CELL_RADIUS * 2)
                     g2d.fill(circle)
                 }
