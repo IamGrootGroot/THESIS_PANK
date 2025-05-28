@@ -630,6 +630,7 @@ process_project() {
             if JAVA_OPTS="-Djava.class.path=$SELECTED_QUPATH_DIR/lib/*:$SELECTED_QUPATH_DIR/lib/app/*" \
                "$SELECTED_QUPATH_PATH" script \
                     --project="$project_file" \
+                    --save \
                     "$CELL_SEG_SCRIPT_PATH" \
                     >> "$QUPATH_LOG" 2>&1; then
                 log "StarDist segmentation (CPU) completed successfully for $project_name"
@@ -678,20 +679,37 @@ process_project() {
             
             # Run with GPU-accelerated settings and explicit classpath
             verbose_log "Running StarDist cell segmentation (GPU mode) for $project_name"
-            verbose_log "Classpath will include: $SELECTED_QUPATH_DIR/lib/* and $SELECTED_QUPATH_DIR/lib/app/*"
             
-            # Export JAVA_OPTS to ensure it's passed to the subprocess
-            export JAVA_OPTS="-Djava.class.path=$SELECTED_QUPATH_DIR/lib/*:$SELECTED_QUPATH_DIR/lib/app/*"
-            verbose_log "JAVA_OPTS set to: $JAVA_OPTS"
+            # Build explicit classpath like in working scripts
+            local qupath_classpath="$main_lib_dir/qupath-extension-stardist-0.5.0.jar:$SELECTED_QUPATH_DIR/lib/app/*"
+            verbose_log "Using explicit classpath: $qupath_classpath"
             
-            if "$SELECTED_QUPATH_PATH" script \
+            # Use java directly with explicit classpath (like in working scripts)
+            if java -cp "$qupath_classpath" qupath.QuPath script \
                     --project="$project_file" \
+                    --save \
                     "$CELL_SEG_SCRIPT_PATH" \
                     >> "$QUPATH_LOG" 2>&1; then
                 log "StarDist segmentation (GPU) completed successfully for $project_name"
                 return 0
             else
                 error_log "StarDist segmentation (GPU) failed for $project_name"
+                verbose_log "Trying fallback method with QuPath executable..."
+                
+                # Fallback: try with the shell-compatible script instead
+                local fallback_script="$SCRIPT_DIR/01_he_stardist_cell_segmentation_shell_compatible.groovy"
+                if [ -f "$fallback_script" ]; then
+                    verbose_log "Using fallback script: $fallback_script"
+                    if java -cp "$qupath_classpath" qupath.QuPath script \
+                            --project="$project_file" \
+                            --save \
+                            "$fallback_script" \
+                            >> "$QUPATH_LOG" 2>&1; then
+                        log "StarDist segmentation (GPU fallback) completed successfully for $project_name"
+                        return 0
+                    fi
+                fi
+                
                 return 1
             fi
             ;;
