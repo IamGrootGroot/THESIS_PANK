@@ -20,6 +20,7 @@ STARDIST_06_JAR="$QUPATH_06_DIR/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
 # QuPath 0.5.1 (GPU-enabled build)
 QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
 QUPATH_051_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath"
+STARDIST_051_JAR="$QUPATH_051_DIR/lib/app/qupath-extension-stardist-0.5.0.jar"
 
 # Model path
 MODEL_PATH="/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
@@ -642,23 +643,48 @@ process_project() {
         "GPU")
             # GPU mode: QuPath 0.5.1 with GPU acceleration and StarDist extension setup
             local main_lib_dir="$SELECTED_QUPATH_DIR/lib"
-            local stardist_051_jar="$SELECTED_QUPATH_DIR/lib/app/qupath-extension-stardist-0.5.0.jar"
+            local stardist_051_jar="$STARDIST_051_JAR"
+            
+            # Debug: Print paths for verification
+            verbose_log "GPU Mode Debug Information:"
+            verbose_log "  QuPath dir: $SELECTED_QUPATH_DIR"
+            verbose_log "  Main lib dir: $main_lib_dir"
+            verbose_log "  StarDist JAR source: $stardist_051_jar"
+            verbose_log "  StarDist JAR target: $main_lib_dir/qupath-extension-stardist-0.5.0.jar"
+            
+            # Check if source StarDist JAR exists
+            if [ ! -f "$stardist_051_jar" ]; then
+                error_log "StarDist source JAR not found: $stardist_051_jar"
+                verbose_log "Checking what's actually in the app directory:"
+                ls -la "$SELECTED_QUPATH_DIR/lib/app/" | grep -i stardist || verbose_log "No StarDist files found"
+                return 1
+            fi
             
             # Copy StarDist extension to main lib directory for headless loading
             if [ ! -f "$main_lib_dir/qupath-extension-stardist-0.5.0.jar" ]; then
-                if [ -f "$stardist_051_jar" ]; then
-                    cp "$stardist_051_jar" "$main_lib_dir/"
-                    verbose_log "Copied StarDist extension to main lib directory for GPU mode"
-                else
-                    error_log "StarDist extension not found for GPU mode: $stardist_051_jar"
-                    return 1
-                fi
+                cp "$stardist_051_jar" "$main_lib_dir/"
+                verbose_log "Copied StarDist extension to main lib directory for GPU mode"
+            else
+                verbose_log "StarDist extension already exists in main lib directory"
+            fi
+            
+            # Verify the copy was successful
+            if [ -f "$main_lib_dir/qupath-extension-stardist-0.5.0.jar" ]; then
+                verbose_log "StarDist extension verified in main lib directory"
+            else
+                error_log "Failed to copy StarDist extension to main lib directory"
+                return 1
             fi
             
             # Run with GPU-accelerated settings and explicit classpath
             verbose_log "Running StarDist cell segmentation (GPU mode) for $project_name"
-            if JAVA_OPTS="-Djava.class.path=$SELECTED_QUPATH_DIR/lib/*:$SELECTED_QUPATH_DIR/lib/app/*" \
-               "$SELECTED_QUPATH_PATH" script \
+            verbose_log "Classpath will include: $SELECTED_QUPATH_DIR/lib/* and $SELECTED_QUPATH_DIR/lib/app/*"
+            
+            # Export JAVA_OPTS to ensure it's passed to the subprocess
+            export JAVA_OPTS="-Djava.class.path=$SELECTED_QUPATH_DIR/lib/*:$SELECTED_QUPATH_DIR/lib/app/*"
+            verbose_log "JAVA_OPTS set to: $JAVA_OPTS"
+            
+            if "$SELECTED_QUPATH_PATH" script \
                     --project="$project_file" \
                     "$CELL_SEG_SCRIPT_PATH" \
                     >> "$QUPATH_LOG" 2>&1; then
