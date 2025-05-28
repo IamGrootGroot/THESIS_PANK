@@ -9,27 +9,6 @@
 # segmentations into QuPath projects.
 # =============================================================================
 
-# =============================================================================
-# QuPath Configuration
-# =============================================================================
-# Update this path to match your QuPath installation on the server
-# Common locations:
-# - Linux: /opt/QuPath/bin/QuPath or /usr/local/bin/QuPath
-# - macOS: /Applications/QuPath-0.5.1-arm64.app/Contents/MacOS/QuPath-0.5.1-arm64
-# - Custom: Set QUPATH_PATH environment variable
-QUPATH_PATH="${QUPATH_PATH:-/opt/QuPath/bin/QuPath}"
-
-# Validate QuPath installation
-if [ ! -f "$QUPATH_PATH" ]; then
-    echo "Error: QuPath not found at $QUPATH_PATH"
-    echo "Please set the correct path in the script or use:"
-    echo "export QUPATH_PATH=/path/to/your/QuPath"
-    exit 1
-fi
-
-# =============================================================================
-# Help Function
-# =============================================================================
 show_help() {
     echo -e "\033[1;35mUsage: $0 [OPTIONS]\033[0m"
     echo
