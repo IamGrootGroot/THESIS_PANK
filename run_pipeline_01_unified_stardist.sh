@@ -32,7 +32,7 @@ show_help() {
     echo
     echo "Options:"
     echo "  -p, --project PATH    Process specific QuPath project (.qpproj)"
-    echo "  -s, --test           Process only the test project (QuPath_MP_PDAC5)"
+    echo "  -s, --test           Process only the test project (QuPath_MP_PDAC2)"
     echo "  -a, --all            Process all QuPath projects (one at a time)"
     echo "  -m, --mode MODE      Force processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
     echo "  -q, --qupath PATH    Force specific QuPath executable path"
@@ -433,8 +433,21 @@ start_time=$(date +%s)
 
 # Determine projects to process
 if [ "$TEST_ONLY" = true ]; then
-    project_files=("QuPath_MP_PDAC5/project.qpproj")
-    log "Processing test project only (QuPath_MP_PDAC5)"
+    # Use mode-specific test projects based on QuPath_MP_PDAC2
+    case "$PROCESSING_MODE" in
+        "GPU")
+            project_files=("/u/trinhvq/Documents/maxencepelloux/HE/QuPath_MP_PDAC2_0.5.1/project.qpproj")
+            log "Processing GPU test project (QuPath_MP_PDAC2_0.5.1)"
+            ;;
+        "CPU")
+            project_files=("/u/trinhvq/Documents/maxencepelloux/HE/QuPath_MP_PDAC2_0.6.0/project.qpproj")
+            log "Processing CPU test project (QuPath_MP_PDAC2_0.6.0)"
+            ;;
+        *)
+            error_log "Unknown processing mode: $PROCESSING_MODE"
+            exit 1
+            ;;
+    esac
 elif [ -n "$PROJECT_PATH" ]; then
     project_files=("$PROJECT_PATH")
     log "Processing single project: $PROJECT_PATH"
