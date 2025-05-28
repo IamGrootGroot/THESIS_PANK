@@ -9,6 +9,16 @@
 # segmentations into QuPath projects.
 # =============================================================================
 
+# =============================================================================
+# Default QuPath Configuration
+# =============================================================================
+# Default QuPath path (can be overridden with -q option)
+# Update this path to match your most common QuPath installation
+DEFAULT_QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.6/qupath/build/dist/QuPath/bin/QuPath}"
+
+# =============================================================================
+# Help Function
+# =============================================================================
 show_help() {
     echo -e "\033[1;35mUsage: $0 [OPTIONS]\033[0m"
     echo
@@ -184,6 +194,7 @@ if [ -n "$CUSTOM_QUPATH_PATH" ]; then
     log "Using custom QuPath path: $QUPATH_PATH"
 else
     # Use default QuPath path from script configuration
+    QUPATH_PATH="$DEFAULT_QUPATH_PATH"
     log "Using default QuPath path: $QUPATH_PATH"
 fi
 
