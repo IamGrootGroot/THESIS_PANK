@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # =============================================================================
-# PANK Thesis Project - QC Thumbnail Export
+# PANK Thesis Project - QC Thumbnail Export (Annotations Already Imported)
 # Copyright (c) 2024 Maxence PELLOUX
 # All rights reserved.
 #
-# This script exports annotated thumbnails from QuPath projects for QC
-# and automatically uploads them to Google Drive for easy review.
+# This script exports QC thumbnails from QuPath projects that already have
+# TRIDENT annotations imported. It does NOT re-import annotations.
 # =============================================================================
 
 # =============================================================================
@@ -24,7 +24,6 @@ show_help() {
     echo "Options:"
     echo "  -p, --project PATH     Path to QuPath project file (.qpproj)"
     echo "  -q, --qupath PATH      Path to QuPath executable (optional)"
-    echo "  -r, --trident PATH     Path to TRIDENT output directory (containing contours_geojson/)"
     echo "  -o, --output DIR       Output directory for thumbnails (default: qc_thumbnails)"
     echo "  -c, --credentials FILE Path to Google Drive credentials file (default: drive_credentials.json)"
     echo "  -t, --token FILE       Path to token file (default: token.json)"
@@ -34,14 +33,13 @@ show_help() {
     echo "  -h, --help            Show this help message"
     echo
     echo "Examples:"
-    echo "  $0 -s -r /path/to/trident_output                       # Export QC for test project"
-    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -r /path/to/trident_output  # Export for specific project"
-    echo "  $0 -a -r /path/to/trident_output                       # Export all projects and upload to Drive"
-    echo "  $0 -p project.qpproj -q /path/to/QuPath -r /path/to/trident  # Custom QuPath path"
+    echo "  $0 -s                                    # Export QC for test project"
+    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj  # Export for specific project"
+    echo "  $0 -a                                    # Export all projects and upload to Drive"
+    echo "  $0 -p project.qpproj -q /path/to/QuPath  # Custom QuPath path"
     echo
     echo "Prerequisites:"
-    echo "  - QuPath must be installed and QUPATH_PATH set correctly"
-    echo "  - TRIDENT output directory with contours_geojson/ subdirectory"
+    echo "  - QuPath projects must already have TRIDENT annotations imported"
     echo "  - Google Drive credentials and token files must be available"
     echo "  - Python with required packages (google-api-python-client, etc.)"
     echo "  - If QuPath path not specified, uses default configuration"
@@ -80,7 +78,6 @@ warn_log() {
 # Command Line Argument Parsing
 # =============================================================================
 PROJECT_PATH=""
-TRIDENT_OUTPUT_PATH=""
 OUTPUT_DIR="qc_thumbnails"
 CREDENTIALS_FILE="drive_credentials.json"
 TOKEN_FILE="token.json"
@@ -96,10 +93,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -q|--qupath)
             DEFAULT_QUPATH_PATH="$2"
-            shift 2
-            ;;
-        -r|--trident)
-            TRIDENT_OUTPUT_PATH="$2"
             shift 2
             ;;
         -o|--output)
@@ -166,31 +159,6 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Validate TRIDENT output path
-if [ -z "$TRIDENT_OUTPUT_PATH" ]; then
-    error_log "TRIDENT output path is required. Use -r option"
-    show_help
-fi
-
-if [ ! -d "$TRIDENT_OUTPUT_PATH" ]; then
-    error_log "TRIDENT output directory not found: $TRIDENT_OUTPUT_PATH"
-    exit 1
-fi
-
-if [ ! -d "$TRIDENT_OUTPUT_PATH/contours_geojson" ]; then
-    error_log "TRIDENT contours_geojson directory not found: $TRIDENT_OUTPUT_PATH/contours_geojson"
-    exit 1
-fi
-
-# Count GeoJSON files
-geojson_count=$(find "$TRIDENT_OUTPUT_PATH/contours_geojson" -name "*.geojson" -type f | wc -l)
-if [ "$geojson_count" -eq 0 ]; then
-    error_log "No GeoJSON files found in $TRIDENT_OUTPUT_PATH/contours_geojson"
-    exit 1
-fi
-
-log "Found $geojson_count TRIDENT GeoJSON files in $TRIDENT_OUTPUT_PATH/contours_geojson"
-
 # Determine projects to process
 PROJECTS_TO_PROCESS=()
 
@@ -221,11 +189,11 @@ done
 # =============================================================================
 clear
 echo -e "\033[1;35m===============================================\033[0m"
-echo -e "\033[1;35m     PANK Thesis - QC Thumbnail Export       \033[0m"
+echo -e "\033[1;35m     PANK Thesis - QC Thumbnail Export Only  \033[0m"
 echo -e "\033[1;35m===============================================\033[0m"
 echo
 
-log "Starting QC thumbnail export pipeline"
+log "Starting QC thumbnail export pipeline (annotations already imported)"
 log "Output directory: $OUTPUT_DIR"
 log "Projects to process: ${#PROJECTS_TO_PROCESS[@]}"
 log "Google Drive credentials: $CREDENTIALS_FILE"
@@ -249,61 +217,54 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Processing project: $project_name"
     log "Project file: $project"
     
-    # Step 1: Import TRIDENT GeoJSON annotations
-    log "Importing TRIDENT GeoJSON annotations..."
+    # Step 1: Export QC thumbnails with TRIDENT annotations
+    log "Exporting QC thumbnails with existing annotations..."
     if "$DEFAULT_QUPATH_PATH" script --project="$project" \
-                      --args="$TRIDENT_OUTPUT_PATH" \
-                      THESIS_PANK/00a_import_trident_geojson.groovy \
-                      >> "$QUPATH_TRIDENT_LOG" 2>&1; then
-        log "Successfully imported TRIDENT GeoJSON for project: $project_name"
+                      --args="$project_output_dir" \
+                      00b_export_annotated_thumbnails_qc.groovy \
+                      >> "$QUPATH_QC_LOG" 2>&1; then
+        log "Successfully exported QC thumbnails for project: $project_name"
+        ((SUCCESSFUL_EXPORTS++))
         
-        # Allow QuPath to save changes
-        sleep 2
+        # Check if thumbnails were actually created
+        if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
+            thumbnail_count=$(find "$project_output_dir" -name "*.jpg" -o -name "*.png" | wc -l)
+            log "Created $thumbnail_count QC thumbnails in: $project_output_dir"
+        else
+            warn_log "No thumbnail files found in output directory for project: $project_name"
+            warn_log "This might indicate that no annotations were found in the project"
+        fi
         
-        # Step 2: Export QC thumbnails with TRIDENT annotations
-        log "Exporting QC thumbnails with TRIDENT annotations..."
-        if "$DEFAULT_QUPATH_PATH" script --project="$project" \
-                          --args="$project_output_dir" \
-                          THESIS_PANK/00b_export_annotated_thumbnails_qc.groovy \
-                          >> "$QUPATH_QC_LOG" 2>&1; then
-            log "Successfully exported QC thumbnails for project: $project_name"
-            ((SUCCESSFUL_EXPORTS++))
+        # Step 3: Upload to Google Drive
+        if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
+            log "Uploading QC thumbnails to Google Drive..."
             
-            # Step 3: Upload to Google Drive
-            if [ -d "$project_output_dir" ] && [ "$(ls -A "$project_output_dir" 2>/dev/null)" ]; then
-                log "Uploading QC thumbnails to Google Drive..."
-                
-                # Determine folder name
-                if [ -n "$CUSTOM_FOLDER_NAME" ]; then
-                    drive_folder_name="${CUSTOM_FOLDER_NAME}_${project_name}"
-                else
-                    drive_folder_name="QC_Thumbnails_${project_name}"
-                fi
-                
-                # Upload using Python script
-                if python3 THESIS_PANK/upload_qc_thumbnails_to_drive.py \
-                    --qc_thumbnails_dir "$project_output_dir" \
-                    --credentials_file "$CREDENTIALS_FILE" \
-                    --token_file "$TOKEN_FILE" \
-                    --folder_name "$drive_folder_name" \
-                    >> "$LOG_FILE" 2>&1; then
-                    log "Successfully uploaded QC thumbnails for project: $project_name"
-                    ((SUCCESSFUL_UPLOADS++))
-                else
-                    error_log "Failed to upload QC thumbnails for project: $project_name"
-                    ((FAILED_UPLOADS++))
-                fi
+            # Determine folder name
+            if [ -n "$CUSTOM_FOLDER_NAME" ]; then
+                drive_folder_name="${CUSTOM_FOLDER_NAME}_${project_name}"
             else
-                warn_log "No thumbnail files found to upload for project: $project_name"
+                drive_folder_name="QC_Thumbnails_${project_name}"
+            fi
+            
+            # Upload using Python script
+            if python3 upload_qc_thumbnails_to_drive.py \
+                --qc_thumbnails_dir "$project_output_dir" \
+                --credentials_file "$CREDENTIALS_FILE" \
+                --token_file "$TOKEN_FILE" \
+                --folder_name "$drive_folder_name" \
+                >> "$LOG_FILE" 2>&1; then
+                log "Successfully uploaded QC thumbnails for project: $project_name"
+                ((SUCCESSFUL_UPLOADS++))
+            else
+                error_log "Failed to upload QC thumbnails for project: $project_name"
                 ((FAILED_UPLOADS++))
             fi
         else
-            error_log "Failed to export QC thumbnails for project: $project_name"
-            ((FAILED_EXPORTS++))
+            warn_log "No thumbnail files found to upload for project: $project_name"
             ((FAILED_UPLOADS++))
         fi
     else
-        error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
+        error_log "Failed to export QC thumbnails for project: $project_name"
         ((FAILED_EXPORTS++))
         ((FAILED_UPLOADS++))
     fi
@@ -315,7 +276,7 @@ done
 # Summary
 # =============================================================================
 echo -e "\033[1;32m===============================================\033[0m"
-echo -e "\033[1;32m           Pipeline Execution Complete         \033[0m"
+echo -e "\033[1;32m           QC Export Complete                  \033[0m"
 echo -e "\033[1;32m===============================================\033[0m"
 log "QC thumbnail export and upload pipeline completed"
 log "Export Results:"
@@ -326,7 +287,6 @@ log "  Successfully uploaded: $SUCCESSFUL_UPLOADS projects"
 log "  Failed to upload: $FAILED_UPLOADS projects"
 log "Check $LOG_FILE for detailed logs"
 log "Check $ERROR_LOG for error logs"
-log "QuPath TRIDENT import output is in $QUPATH_TRIDENT_LOG"
 log "QuPath QC export output is in $QUPATH_QC_LOG"
 
 if [ -d "$OUTPUT_DIR" ]; then
