@@ -85,9 +85,8 @@ Detects individual cells within TRIDENT-defined tissue regions using StarDist.
 
 ### Step 2: Tile Extraction
 
-Extracts 224x224 pixel patches centered around each detected cell.
+Extracts 224x224 pixel patches centered around each detected cell:
 
-Sample extracted tiles:
 ![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
 ![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
 ![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/1d789512-85a8-478f-96ae-45b742b763bc)
