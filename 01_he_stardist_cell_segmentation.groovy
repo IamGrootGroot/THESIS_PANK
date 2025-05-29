@@ -1,6 +1,6 @@
 // Cell segmentation annotations using StarDist2D implementation in QuPath and its pretrained H&E heavy model
 // by A.Khellaf (updated 2025-01)
-createFullImageAnnotation(true)
+// createFullImageAnnotation(true)
 
 import qupath.lib.gui.dialogs.Dialogs
 def pathModel = "C:/Users/LA0122630/Documents/Khellaf_Kassab_Brassard_UniClusteringColon/4_codes/he_heavy_augment.pb" // can change for DAPI if needed (in the same folder)
