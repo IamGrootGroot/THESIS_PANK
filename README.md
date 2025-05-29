@@ -64,16 +64,11 @@ python run_trident_segmentation.py \
     --trident_script_path /path/to/trident/run_batch_of_slides.py
 ```
 
-### Step 1: Cell Detection & Tile Extraction
+### Step 1: Cell Detection (StarDist)
 
-Detects cells within tissue regions and extracts image patches.
+Detects individual cells within TRIDENT-defined tissue regions using StarDist.
 
 ![03000664-00781897-22HI053907-1-A02-6_cell_detection_qc](https://github.com/user-attachments/assets/a6257ce2-f873-4079-8f64-611c9820cbe3)
-
-Sample extracted tiles:
-![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/56c0540e-5ae9-47e9-9462-abe360d36593)
-![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
-![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
 
 **Automatic Configuration:**
 - **GPU Mode**: QuPath 0.5.1 + CUDA → Faster processing
@@ -88,7 +83,24 @@ Sample extracted tiles:
 ./run_pipeline_01_unified_stardist.sh -s -m cpu
 ```
 
-### Step 2: Feature Extraction
+### Step 2: Tile Extraction
+
+Extracts 224x224 pixel patches centered around each detected cell.
+
+Sample extracted tiles:
+![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/56c0540e-5ae9-47e9-9462-abe360d36593)
+![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
+![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
+
+```bash
+# Extract tiles from detected cells
+./run_pipeline_02_batch_tiling.sh -s
+
+# Or run both steps together (convenience)
+./run_pipeline_01_unified_stardist.sh -s  # Includes both cell detection and tiling
+```
+
+### Step 3: Feature Extraction
 
 Extracts 1536-dimensional features from each tile using UNI2-h model.
 
@@ -100,7 +112,7 @@ Extracts 1536-dimensional features from each tile using UNI2-h model.
     -b 32
 ```
 
-### Step 3: Clustering & Visualization
+### Step 4: Clustering & Visualization
 
 Performs dimensionality reduction and clustering analysis.
 
