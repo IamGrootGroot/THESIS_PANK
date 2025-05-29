@@ -57,6 +57,10 @@ The script includes a `pyramidalizeImages` flag (default: `true`) that determine
 ### 0. TRIDENT Tissue Segmentation
 Uses the [TRIDENT toolkit](https://github.com/mahmoodlab/TRIDENT) for initial tissue segmentation on whole-slide images.
 
+
+![03000664-00781901-22HI053912-1-A01-6_qc_thumbnail](https://github.com/user-attachments/assets/eed93c55-66a1-4d6a-a7d5-95d15c9dd0cb)
+
+
 #### Features
 - Automated batch processing of whole-slide images
 - Hole removal in segmentation results (`--remove_holes` option)
@@ -106,8 +110,16 @@ python upload_contours_to_drive.py \
 - Only requested scopes are used (file creation and upload)
 
 ### 1. Cell Segmentation and Tile Extraction (Steps 1-2) - UNIFIED APPROACH
-
 The pipeline now features a **unified cell segmentation system** that automatically detects your QuPath installation and CUDA availability to choose the optimal processing configuration:
+
+
+![03000664-00781897-22HI053907-1-A02-6_cell_detection_qc](https://github.com/user-attachments/assets/a6257ce2-f873-4079-8f64-611c9820cbe3)
+
+
+![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/56c0540e-5ae9-47e9-a581-bb2d8d93f5dd)
+![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
+![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
+
 
 #### **Automatic Configuration Detection:**
 - **GPU Mode**: QuPath 0.5.1 + CUDA available → GPU-accelerated processing
