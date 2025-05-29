@@ -116,6 +116,9 @@ Extracts 1536-dimensional features from each tile using UNI2-h model.
 
 Performs dimensionality reduction and clustering analysis.
 
+![umap_3d_visualization](https://github.com/user-attachments/assets/b56f97fd-5802-402b-b004-3fbc8b316998)
+
+
 ```bash
 python 04_05_umap_3d_kmeans30.py \
     --input_csv features.csv \
