@@ -1,4 +1,4 @@
-# PANK Thesis Project - Cell Analysis Pipeline
+# 🌪 MIXR - A Cellular Level Analysis Pipeline For Pathology Diagnosis and Prognosis Prediction 
 
 A comprehensive pipeline for cell analysis in H&E stained images, including tissue segmentation, cell detection, tile extraction, feature extraction, and clustering analysis using deep learning models.
 
