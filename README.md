@@ -51,20 +51,8 @@ python run_trident_segmentation.py \
 # Step 1: Cell Detection (StarDist) - Processes single test project
 ./run_pipeline_01_unified_stardist.sh -s
 
-# Step 2: Tile Extraction
-
-Extracts 224x224 pixel patches centered around each detected cell:
-
-![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
-![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
-![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/1d789512-85a8-478f-96ae-45b742b763bc)
-
-```bash
-# Run tile extraction separately (if needed)
-./run_pipeline_02_batch_tiling.sh -s
-```
-
-**Note**: Tile extraction is typically performed automatically as part of the cell detection workflow (`run_pipeline_01_unified_stardist.sh`). Use the separate tiling script only if you need to re-extract tiles without re-running cell detection.
+# Step 2: Tile Extraction (typically automatic with Step 1)
+# ./run_pipeline_02_batch_tiling.sh -s  # Only if running separately
 
 # Step 3: Feature Extraction
 ./run_pipeline_03.sh \
