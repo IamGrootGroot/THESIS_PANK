@@ -307,11 +307,11 @@ export_qc_for_project() {
     local project_file="$1"
     local project_name=$(basename "$(dirname "$project_file")")
     
-    log "Exporting QC thumbnails for project: $project_name"
-    verbose_log "Project file: $project_file"
+    log "Exporting QC thumbnails for project: $project_name" >&2
+    verbose_log "Project file: $project_file" >&2
     
     if [ ! -f "$project_file" ]; then
-        error_log "Project file not found: $project_file"
+        error_log "Project file not found: $project_file" >&2
         return 1
     fi
     
@@ -320,17 +320,17 @@ export_qc_for_project() {
     mkdir -p "$project_qc_dir"
     
     # Run QC export
-    verbose_log "Running QC export for $project_name"
+    verbose_log "Running QC export for $project_name" >&2
     if "$SELECTED_QUPATH_PATH" script \
             --project="$project_file" \
             --args "$project_qc_dir" \
             "$QC_SCRIPT" \
             >> "$QUPATH_LOG" 2>&1; then
-        log "QC export completed for $project_name"
-        echo "$project_qc_dir"  # Return the output directory
+        log "QC export completed for $project_name" >&2
+        echo "$project_qc_dir"  # Return the output directory (only this goes to stdout)
         return 0
     else
-        error_log "QC export failed for $project_name"
+        error_log "QC export failed for $project_name" >&2
         return 1
     fi
 }
@@ -447,15 +447,11 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
         
         # Upload each QC directory
         for qc_dir in "${qc_directories[@]}"; do
-            log "DEBUG: Checking QC directory: $qc_dir"
-            
             if [ -d "$qc_dir" ]; then
-                log "DEBUG: Directory exists: $qc_dir"
                 project_name=$(basename "$qc_dir")
                 
                 # Verify QC files exist before upload
                 qc_file_count=$(find "$qc_dir" -name "*.jpg" -o -name "*.png" | wc -l)
-                log "DEBUG: Found $qc_file_count files in $qc_dir"
                 
                 if [ "$qc_file_count" -eq 0 ]; then
                     warn_log "No QC thumbnail files found in $qc_dir, skipping upload"
@@ -478,9 +474,7 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
                     error_log "Failed to upload QC thumbnails for $project_name"
                 fi
             else
-                error_log "DEBUG: Directory does not exist: $qc_dir"
-                error_log "DEBUG: Current working directory: $(pwd)"
-                error_log "DEBUG: Directory listing: $(ls -la)"
+                warn_log "QC directory not found: $qc_dir"
             fi
         done
     fi
