@@ -51,8 +51,8 @@ python run_trident_segmentation.py \
 # Step 1: Cell Detection (StarDist) - Processes single test project
 ./run_pipeline_01_unified_stardist.sh -s
 
-# Step 2: Tile Extraction (typically automatic with Step 1)
-# ./run_pipeline_02_batch_tiling.sh -s  # Only if running separately
+# Step 2: Tile Extraction
+./run_pipeline_02_batch_tiling.sh -s  
 
 # Step 3: Feature Extraction
 ./run_pipeline_03.sh \
