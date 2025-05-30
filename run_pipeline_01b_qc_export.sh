@@ -60,6 +60,10 @@ error_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" | tee -a "$LOG_FILE"
 }
 
+warn_log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1" | tee -a "$LOG_FILE"
+}
+
 # Parse arguments
 PROJECT_PATH=""
 PROCESS_ALL=false
@@ -140,17 +144,32 @@ export_qc_for_project() {
     
     # Create project-specific output directory
     local project_qc_dir="${QC_OUTPUT_DIR}/${project_name}"
+    mkdir -p "$project_qc_dir"
+    log "Created QC output directory: $project_qc_dir"
     
-    # Run QC export
+    # Run QC export with explicit output directory argument
+    log "Running QuPath QC export script for $project_name..."
     if "$DEFAULT_QUPATH_PATH" script \
             --project="$project_file" \
+            --args="$project_qc_dir" \
             "$QC_SCRIPT" \
-            "$project_qc_dir"; then
+            >> "$LOG_FILE" 2>&1; then
         log "QC export completed for $project_name"
-        echo "$project_qc_dir"  # Return the output directory
-        return 0
+        
+        # Verify that files were actually created
+        local file_count=$(find "$project_qc_dir" -name "*.jpg" -o -name "*.png" | wc -l)
+        if [ "$file_count" -gt 0 ]; then
+            log "Created $file_count QC thumbnail files in: $project_qc_dir"
+            echo "$project_qc_dir"  # Return the output directory
+            return 0
+        else
+            warn_log "No QC thumbnail files were created for $project_name"
+            warn_log "This might indicate no annotations or detections were found"
+            return 1
+        fi
     else
         error_log "QC export failed for $project_name"
+        error_log "Check QuPath logs for detailed error information"
         return 1
     fi
 }
@@ -213,21 +232,58 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
     if [ ! -f "$UPLOAD_SCRIPT" ]; then
         error_log "Upload script not found: $UPLOAD_SCRIPT"
     else
-        # Upload each QC directory
-        for qc_dir in "${qc_directories[@]}"; do
-            if [ -d "$qc_dir" ]; then
-                project_name=$(basename "$qc_dir")
-                log "Uploading QC thumbnails for $project_name..."
-                
-                if python3 "$UPLOAD_SCRIPT" \
-                    --qc_thumbnails_dir "$qc_dir" \
-                    --folder_name "Cell_Detection_QC_${project_name}_${TIMESTAMP}"; then
-                    log "Successfully uploaded QC thumbnails for $project_name"
-                else
-                    error_log "Failed to upload QC thumbnails for $project_name"
-                fi
+        # Check for required authentication files
+        CREDENTIALS_FILE="drive_credentials.json"
+        TOKEN_FILE="token.json"
+        
+        if [ ! -f "$TOKEN_FILE" ]; then
+            error_log "Token file not found: $TOKEN_FILE"
+            error_log "Please run generate_drive_token.py first to create the token file"
+        else
+            log "Found token file: $TOKEN_FILE"
+            
+            # Credentials file is optional if token is valid
+            if [ ! -f "$CREDENTIALS_FILE" ]; then
+                warn_log "Credentials file not found: $CREDENTIALS_FILE (will try to use token file only)"
+            else
+                log "Found credentials file: $CREDENTIALS_FILE"
             fi
-        done
+            
+            # Wait for files to be fully written to disk before upload
+            log "Waiting for QC files to be fully written to disk..."
+            sleep 3
+            
+            # Upload each QC directory
+            for qc_dir in "${qc_directories[@]}"; do
+                if [ -d "$qc_dir" ]; then
+                    project_name=$(basename "$qc_dir")
+                    
+                    # Verify QC files exist before upload
+                    qc_file_count=$(find "$qc_dir" -name "*.jpg" -o -name "*.png" | wc -l)
+                    if [ "$qc_file_count" -eq 0 ]; then
+                        warn_log "No QC thumbnail files found in $qc_dir, skipping upload"
+                        continue
+                    fi
+                    
+                    log "Uploading QC thumbnails for $project_name ($qc_file_count files)..."
+                    
+                    # Upload using Python script (same pattern as working scripts)
+                    if python3 "$UPLOAD_SCRIPT" \
+                        --qc_thumbnails_dir "$qc_dir" \
+                        --credentials_file "$CREDENTIALS_FILE" \
+                        --token_file "$TOKEN_FILE" \
+                        --folder_name "Cell_Detection_QC_${project_name}_${TIMESTAMP}" \
+                        >> "$LOG_FILE" 2>&1; then
+                        log "Successfully uploaded QC thumbnails for $project_name"
+                    else
+                        error_log "Failed to upload QC thumbnails for $project_name"
+                        error_log "Check $LOG_FILE for detailed error information"
+                    fi
+                else
+                    warn_log "QC directory not found: $qc_dir"
+                fi
+            done
+        fi
     fi
 fi
 
