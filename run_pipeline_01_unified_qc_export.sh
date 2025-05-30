@@ -432,6 +432,19 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
     if [ ! -f "$UPLOAD_SCRIPT" ]; then
         error_log "Upload script not found: $UPLOAD_SCRIPT"
     else
+        # Define authentication files (same pattern as working scripts)
+        # Use token.json for both credentials and token (same as working scripts)
+        if [ ! -f "$TOKEN_PATH" ] && [ -f "../$(basename "$TOKEN_PATH")" ]; then
+            TOKEN_FILE="../$(basename "$TOKEN_PATH")"
+        else
+            TOKEN_FILE="$TOKEN_PATH"
+        fi
+        
+        # Use the same file for both credentials and token (like working scripts)
+        CREDENTIALS_FILE="$TOKEN_FILE"
+        
+        log "Using token file for both credentials and token: $TOKEN_FILE"
+        
         # Upload each QC directory
         for qc_dir in "${qc_directories[@]}"; do
             if [ -d "$qc_dir" ]; then
@@ -446,13 +459,14 @@ if [ "$UPLOAD_TO_DRIVE" = true ] && [ ${#qc_directories[@]} -gt 0 ]; then
                 
                 log "Uploading QC thumbnails for $project_name ($qc_file_count files)..."
                 
-                verbose_log "Running upload command: python3 $UPLOAD_SCRIPT --qc_thumbnails_dir $qc_dir --folder_name Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP} --credentials_file $TOKEN_PATH --token_file $TOKEN_PATH"
+                verbose_log "Running upload command: python3 $UPLOAD_SCRIPT --qc_thumbnails_dir $qc_dir --folder_name Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP} --credentials_file $CREDENTIALS_FILE --token_file $TOKEN_FILE"
                 
+                # Upload using Python script (same pattern as working scripts)
                 if python3 "$UPLOAD_SCRIPT" \
                     --qc_thumbnails_dir "$qc_dir" \
                     --folder_name "Unified_Cell_Detection_QC_${project_name}_${TIMESTAMP}" \
-                    --credentials_file "$TOKEN_PATH" \
-                    --token_file "$TOKEN_PATH" \
+                    --credentials_file "$CREDENTIALS_FILE" \
+                    --token_file "$TOKEN_FILE" \
                     >> "$LOG_FILE" 2>&1; then
                     log "Successfully uploaded QC thumbnails for $project_name"
                 else

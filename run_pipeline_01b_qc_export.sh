@@ -183,7 +183,18 @@ qc_directories=()
 if [ "$TEST_ONLY" = true ]; then
     # Process test project only
     log "Processing test project only (QuPath_MP_PDAC5)"
-    if qc_dir=$(export_qc_for_project "QuPath_MP_PDAC5/project.qpproj"); then
+    # Check for project in current directory first, then parent directory
+    if [ -f "QuPath_MP_PDAC5/project.qpproj" ]; then
+        test_project="QuPath_MP_PDAC5/project.qpproj"
+    elif [ -f "../QuPath_MP_PDAC5/project.qpproj" ]; then
+        test_project="../QuPath_MP_PDAC5/project.qpproj"
+    else
+        error_log "Test project not found in current directory or parent directory"
+        error_log "Looked for: QuPath_MP_PDAC5/project.qpproj and ../QuPath_MP_PDAC5/project.qpproj"
+        exit 1
+    fi
+    
+    if qc_dir=$(export_qc_for_project "$test_project"); then
         ((successful_exports++))
         qc_directories+=("$qc_dir")
     else
@@ -204,11 +215,15 @@ elif [ "$PROCESS_ALL" = true ]; then
     # Process all projects
     log "Processing all QuPath projects"
     
+    # Look for projects in current directory first, then parent directory
     project_files=(QuPath_MP_PDAC*/project.qpproj)
-    
     if [ ${#project_files[@]} -eq 0 ] || [ ! -f "${project_files[0]}" ]; then
-        error_log "No QuPath project files found"
-        exit 1
+        # Try parent directory
+        project_files=(../QuPath_MP_PDAC*/project.qpproj)
+        if [ ${#project_files[@]} -eq 0 ] || [ ! -f "${project_files[0]}" ]; then
+            error_log "No QuPath project files found in current directory or parent directory"
+            exit 1
+        fi
     fi
     
     log "Found ${#project_files[@]} QuPath projects to process"
