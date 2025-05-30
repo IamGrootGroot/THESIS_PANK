@@ -138,6 +138,21 @@ Detects individual cells within TRIDENT-defined tissue regions using StarDist.
 ./run_pipeline_01_unified_stardist.sh -s -m cpu
 ```
 
+### Step 2: Tile Extraction
+
+Extracts 224x224 pixel patches centered around each detected cell:
+
+![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
+![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
+![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/1d789512-85a8-478f-96ae-45b742b763bc)
+
+```bash
+# Extract tiles from detected cells
+./run_pipeline_02_batch_tiling.sh -s
+```
+
+**Note**: Tile extraction can be run as a separate step or is automatically included when using the unified StarDist pipeline.
+
 ### Step 3: Feature Extraction
 
 Extracts 1536-dimensional features from each tile using UNI2-h model.
