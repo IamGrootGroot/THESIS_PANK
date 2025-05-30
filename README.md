@@ -53,16 +53,42 @@ python 04_05_umap_3d_kmeans30.py --input_csv features.csv --output_dir results/
 
 ### Step 0: Tissue Segmentation (TRIDENT)
 
-Automatically segments tissue regions from whole-slide images.
+Automatically segments tissue regions from whole-slide images. Supports both directory-based and QuPath project-based input.
 
 ![03000664-00781901-22HI053912-1-A01-6_qc_thumbnail](https://github.com/user-attachments/assets/eed93c55-66a1-4d6a-a7d5-95d15c9dd0cb)
 
+**Directory-based approach:**
 ```bash
 python run_trident_segmentation.py \
     --image_dir /path/to/slides \
     --trident_output_dir ./trident_output \
     --trident_script_path /path/to/trident/run_batch_of_slides.py
 ```
+
+**QuPath project-based approach (NEW):**
+```bash
+# Process images from a specific QuPath project
+python run_trident_segmentation.py \
+    --qupath_project ../QuPath_MP_PDAC100 \
+    --trident_output_dir ./trident_output_pdac100 \
+    --trident_script_path /path/to/trident/run_batch_of_slides.py \
+    --gpu 0
+
+# With custom temporary directory
+python run_trident_segmentation.py \
+    --qupath_project ../QuPath_MP_PDAC100 \
+    --trident_output_dir ./trident_output_pdac100 \
+    --trident_script_path /path/to/trident/run_batch_of_slides.py \
+    --temp_dir /tmp/trident_work \
+    --keep_temp
+```
+
+**Features:**
+- **Directory Input**: Process all supported WSI files in a directory
+- **QuPath Project Input**: Extract and process images directly from QuPath projects
+- **Automatic Image Discovery**: Reads `server.json` files to locate actual image paths
+- **Temporary Symlinks**: Creates temporary directory with symbolic links for seamless processing
+- **Flexible Cleanup**: Option to preserve temporary files for debugging
 
 ### Step 1: Cell Detection (StarDist)
 
