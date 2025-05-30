@@ -35,19 +35,58 @@ pip install -r requirements.txt
 ```
 
 #### 2. Run Complete Pipeline
+
+The pipeline consists of multiple steps that must be run sequentially:
+
 ```bash
-# Process test project (5 images)
+# Step 0: Tissue Segmentation (TRIDENT) - Optional, only if needed
+python run_trident_segmentation.py \
+    --qupath_project ../QuPath_MP_PDAC100 \
+    --trident_output_dir ./trident_output_pdac100 \
+    --trident_script_path /path/to/trident/run_batch_of_slides.py
+
+# Import TRIDENT results into QuPath (if Step 0 was performed)
+./run_pipeline_00a_import_trident_geojson.sh -t ./trident_output_pdac100 -s
+
+# Step 1: Cell Detection (StarDist) - Processes single test project
 ./run_pipeline_01_unified_stardist.sh -s
 
-# Process all projects
-./run_pipeline_01_unified_stardist.sh -a
+# Step 2: Tile Extraction
 
-# Extract features
-./run_pipeline_03.sh -i output/tiles -o features.csv -t YOUR_HF_TOKEN
+Extracts 224x224 pixel patches centered around each detected cell:
 
-# Generate visualizations
-python 04_05_umap_3d_kmeans30.py --input_csv features.csv --output_dir results/
+![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
+![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
+![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/1d789512-85a8-478f-96ae-45b742b763bc)
+
+```bash
+# Run tile extraction separately (if needed)
+./run_pipeline_02_batch_tiling.sh -s
 ```
+
+**Note**: Tile extraction is typically performed automatically as part of the cell detection workflow (`run_pipeline_01_unified_stardist.sh`). Use the separate tiling script only if you need to re-extract tiles without re-running cell detection.
+
+# Step 3: Feature Extraction
+./run_pipeline_03.sh \
+    -i output/tiles \
+    -o features.csv \
+    -t YOUR_HUGGINGFACE_TOKEN \
+    -b 32
+
+# Step 4: Clustering & Visualization
+python 04_05_umap_3d_kmeans30.py \
+    --input_csv features.csv \
+    --output_dir results/
+
+# Optional: Generate QC thumbnails and upload to Google Drive
+./run_pipeline_01_unified_qc_export.sh -s -u
+```
+
+**What each script does:**
+- `run_trident_segmentation.py`: Tissue segmentation only
+- `run_pipeline_01_unified_stardist.sh`: Cell detection + tile extraction
+- `run_pipeline_03.sh`: Feature extraction only  
+- `04_05_umap_3d_kmeans30.py`: Clustering and visualization only
 
 ## Pipeline Steps
 
@@ -107,23 +146,6 @@ Detects individual cells within TRIDENT-defined tissue regions using StarDist.
 # Force specific mode
 ./run_pipeline_01_unified_stardist.sh -s -m gpu
 ./run_pipeline_01_unified_stardist.sh -s -m cpu
-```
-
-### Step 2: Tile Extraction
-
-Extracts 224x224 pixel patches centered around each detected cell:
-
-![ROI_1_30826_26867_057335](https://github.com/user-attachments/assets/67a0403d-af2a-4ae9-9462-abe360d36593)
-![ROI_1_34975_7797_057278](https://github.com/user-attachments/assets/3c7a637b-0033-40de-b1d9-c32a034669ac)
-![ROI_1_35206_7874_057376](https://github.com/user-attachments/assets/1d789512-85a8-478f-96ae-45b742b763bc)
-
-
-```bash
-# Extract tiles from detected cells
-./run_pipeline_02_batch_tiling.sh -s
-
-# Or run both steps together (convenience)
-./run_pipeline_01_unified_stardist.sh -s  # Includes both cell detection and tiling
 ```
 
 ### Step 3: Feature Extraction
