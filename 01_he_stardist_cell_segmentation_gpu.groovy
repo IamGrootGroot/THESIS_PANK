@@ -70,6 +70,30 @@ if (imageList.isEmpty()) {
 
 println "Project contains ${imageList.size()} images"
 
+// Check if cell segmentation has already been completed
+def projectDir = new File(project.getPath()).getParentFile()
+def completionMarkerFile = new File(projectDir, ".stardist_completed")
+if (completionMarkerFile.exists()) {
+    println "Cell segmentation already completed for this project. Skipping..."
+    println "Delete ${completionMarkerFile.getAbsolutePath()} to re-run cell segmentation."
+    return
+}
+
+// Create a lock file to prevent multiple simultaneous runs
+def lockFile = new File(projectDir, ".stardist_running")
+if (lockFile.exists()) {
+    println "Cell segmentation is already running for this project. Skipping this instance..."
+    return
+}
+
+// Create lock file
+try {
+    lockFile.createNewFile()
+    println "Created lock file: ${lockFile.getAbsolutePath()}"
+} catch (Exception e) {
+    println "Warning: Could not create lock file, proceeding anyway..."
+}
+
 // GPU-optimized StarDist detector configuration
 println "Creating GPU-optimized StarDist detector..."
 def stardist = StarDist2D.builder(pathModel)
@@ -187,6 +211,21 @@ println "Average time per image: ${processedImages > 0 ? (projectTotalTime/proce
 def runtime = Runtime.getRuntime()
 def usedMemory = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
 println "Memory usage: ${usedMemory.round(2)} MB"
+
+// Clean up lock file and create completion marker
+try {
+    lockFile.delete()
+    println "Removed lock file"
+} catch (Exception e) {
+    println "Warning: Could not remove lock file: ${e.getMessage()}"
+}
+
+try {
+    completionMarkerFile.createNewFile()
+    println "Created completion marker: ${completionMarkerFile.getAbsolutePath()}"
+} catch (Exception e) {
+    println "Warning: Could not create completion marker: ${e.getMessage()}"
+}
 
 // GPU-specific performance notes
 println ""

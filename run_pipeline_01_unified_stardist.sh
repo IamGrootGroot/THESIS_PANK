@@ -38,6 +38,7 @@ show_help() {
     echo "  -m, --mode MODE      Force processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
     echo "  -q, --qupath PATH    Custom QuPath executable path (with compatibility checks)"
     echo "  -v, --verbose        Enable verbose logging"
+    echo "  --force              Force re-processing even if already completed"
     echo "  -h, --help           Show this help message"
     echo
     echo "Processing Modes:"
@@ -444,6 +445,7 @@ TEST_ONLY=false
 FORCE_MODE="auto"
 CUSTOM_QUPATH_PATH=""
 VERBOSE=false
+FORCE_REPROCESS=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -469,6 +471,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--verbose)
             VERBOSE=true
+            shift
+            ;;
+        --force)
+            FORCE_REPROCESS=true
             shift
             ;;
         -h|--help)
@@ -611,6 +617,16 @@ process_project() {
     if [ ! -f "$project_file" ]; then
         error_log "Project file not found: $project_file"
         return 1
+    fi
+    
+    # Handle force reprocessing
+    if [ "$FORCE_REPROCESS" = true ]; then
+        local project_dir=$(dirname "$project_file")
+        local completion_marker="$project_dir/.stardist_completed"
+        if [ -f "$completion_marker" ]; then
+            rm -f "$completion_marker"
+            log "Removed completion marker to force re-processing: $project_name"
+        fi
     fi
     
     # Mode-specific setup
