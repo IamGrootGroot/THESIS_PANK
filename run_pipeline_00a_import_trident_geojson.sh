@@ -447,36 +447,34 @@ println "  Errors during import for: \${errorCount} images."
 EOF
         
         # Run import in background and capture output to log only
-        if "$QUPATH_PATH" script \
+        "$QUPATH_PATH" script \
                         "$temp_import_script" \
                         --args "$project_file" "$TRIDENT_DIR" \
-                        >> "$QUPATH_LOG" 2>&1 & then
-            
-            local import_pid=$!
-            
-            # Show progress bar while import runs
-            show_import_progress "$import_pid" "$project_name"
-            
-            # Wait for import to complete and get exit code
-            wait "$import_pid"
-            local exit_code=$?
-            
-            # Clean up temp script
-            rm -f "$temp_import_script"
-            
-            if [ $exit_code -eq 0 ]; then
-                echo -e "\n\033[1;32m✓ Successfully imported TRIDENT annotations for $project_name\033[0m"
-                log "Successfully imported TRIDENT GeoJSON for project: $project_name"
-                return 0
-            else
-                echo -e "\n\033[1;31m✗ Failed to import TRIDENT annotations for $project_name\033[0m"
-                error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
-                return 1
-            fi
+                        >> "$QUPATH_LOG" 2>&1 &
+        
+        local import_pid=$!
+        
+        # Give the process a moment to start, then show progress immediately
+        sleep 0.5
+        echo -n "Starting import... "
+        
+        # Show progress bar while import runs
+        show_import_progress "$import_pid" "$project_name"
+        
+        # Wait for import to complete and get exit code
+        wait "$import_pid"
+        local exit_code=$?
+        
+        # Clean up temp script
+        rm -f "$temp_import_script"
+        
+        if [ $exit_code -eq 0 ]; then
+            echo -e "\n\033[1;32m✓ Successfully imported TRIDENT annotations for $project_name\033[0m"
+            log "Successfully imported TRIDENT GeoJSON for project: $project_name"
+            return 0
         else
-            echo -e "\n\033[1;31m✗ Failed to start import process for $project_name\033[0m"
-            error_log "Failed to start import process for project: $project_name"
-            rm -f "$temp_import_script"
+            echo -e "\n\033[1;31m✗ Failed to import TRIDENT annotations for $project_name\033[0m"
+            error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
             return 1
         fi
         
@@ -493,10 +491,10 @@ EOF
 show_import_progress() {
     local pid=$1
     local project_name=$2
-    local progress=0
     local spinner='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
     
+    # Ensure we start showing progress immediately
     while kill -0 "$pid" 2>/dev/null; do
         # Get current spinner character
         local spin_char=${spinner:$((i % ${#spinner})):1}
@@ -506,7 +504,7 @@ show_import_progress() {
                "$spin_char" "$project_name" "$(date '+%H:%M:%S')"
         
         ((i++))
-        sleep 0.1
+        sleep 0.3
     done
     
     # Clear the spinner line
