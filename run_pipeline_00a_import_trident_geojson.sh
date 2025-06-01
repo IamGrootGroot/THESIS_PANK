@@ -317,6 +317,7 @@ process_project() {
     
     # Run the GeoJSON import script - show output on console AND log to file
     if "$QUPATH_PATH" script --project="$project_file" \
+                    --save \
                     --args="$TRIDENT_DIR" \
                     "$GROOVY_SCRIPT" \
                     2>&1 | tee -a "$QUPATH_LOG"; then
