@@ -42,6 +42,7 @@ show_help() {
     echo "  -a, --all              Process all QuPath projects in current directory"
     echo "  -u, --upload           Upload QC thumbnails to Google Drive after export"
     echo "  -v, --verbose          Enable verbose logging"
+    echo "  --force                Force re-export even if already completed"
     echo "  -h, --help            Show this help message"
     echo
     echo "Processing Modes:"
@@ -359,6 +360,7 @@ CUSTOM_QUPATH_PATH=""
 FORCE_MODE="auto"
 UPLOAD_TO_DRIVE=false
 VERBOSE=false
+FORCE_RE_EXPORT=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -408,6 +410,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -v|--verbose)
             VERBOSE=true
+            shift
+            ;;
+        --force)
+            FORCE_RE_EXPORT=true
             shift
             ;;
         -h|--help)
@@ -598,6 +604,18 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     else
         QUPATH_ARGS="--args=$project_output_dir"
         log "Processing all images from project"
+    fi
+    
+    # Clean up any existing lock files from previous interrupted runs
+    if [ -f "$project_output_dir/.qc_export_running" ]; then
+        rm -f "$project_output_dir/.qc_export_running"
+        verbose_log "Cleaned up existing lock file"
+    fi
+    
+    # Clean up completion marker if force re-export is requested
+    if [ "$FORCE_RE_EXPORT" = true ] && [ -f "$project_output_dir/.qc_export_completed" ]; then
+        rm -f "$project_output_dir/.qc_export_completed"
+        log "Removed completion marker to force re-export"
     fi
     
     # Step 1: Export QC thumbnails with TRIDENT annotations

@@ -26,6 +26,28 @@ import java.awt.Color
 import java.awt.BasicStroke
 import java.awt.RenderingHints
 
+// =============================================================================
+// EXECUTION GUARD - Only run once per project (not once per image)
+// =============================================================================
+// Check if we're running in a per-image context and only proceed for the first image
+def currentImage = getCurrentImageData()
+if (currentImage != null) {
+    def currentImageName = currentImage.getServer().getMetadata().getName()
+    def project = getProject()
+    if (project != null) {
+        def allImages = project.getImageList()
+        if (allImages.size() > 0) {
+            def firstImageName = allImages[0].readImageData().getServer().getMetadata().getName()
+            if (currentImageName != firstImageName) {
+                println "QC Export: Skipping ${currentImageName} - only running once per project on first image"
+                return
+            }
+        }
+    }
+}
+
+println "QC Export: Running on first image - will process entire project"
+
 // Configuration
 def QC_OUTPUT_DIR = "qc_thumbnails"
 def THUMBNAIL_WIDTH = 2048  // High resolution for QC
@@ -66,6 +88,29 @@ def project = getProject()
 if (project == null) {
     println "Error: No QuPath project is currently open."
     return
+}
+
+// Check if this script has already been run by looking for a completion marker
+def completionMarkerFile = new File(outputDirectory, ".qc_export_completed")
+if (completionMarkerFile.exists()) {
+    println "QC export already completed for this project. Skipping..."
+    println "Delete ${completionMarkerFile.getAbsolutePath()} to re-run the export."
+    return
+}
+
+// Create a lock file to prevent multiple simultaneous runs
+def lockFile = new File(outputDirectory, ".qc_export_running")
+if (lockFile.exists()) {
+    println "QC export is already running for this project. Skipping this instance..."
+    return
+}
+
+// Create lock file
+try {
+    lockFile.createNewFile()
+    println "Created lock file: ${lockFile.getAbsolutePath()}"
+} catch (Exception e) {
+    println "Warning: Could not create lock file, proceeding anyway..."
 }
 
 def totalImages = project.getImageList().size()
@@ -229,6 +274,21 @@ summaryWriter.writeLine("Successfully exported: ${exportedCount}")
 summaryWriter.writeLine("Images with no annotations: ${noAnnotationCount}")
 summaryWriter.writeLine("Errors encountered: ${errorCount}")
 summaryWriter.close()
+
+// Clean up lock file and create completion marker
+try {
+    lockFile.delete()
+    println "Removed lock file"
+} catch (Exception e) {
+    println "Warning: Could not remove lock file: ${e.getMessage()}"
+}
+
+try {
+    completionMarkerFile.createNewFile()
+    println "Created completion marker: ${completionMarkerFile.getAbsolutePath()}"
+} catch (Exception e) {
+    println "Warning: Could not create completion marker: ${e.getMessage()}"
+}
 
 println "QC thumbnail export completed!"
 println "Summary:"
