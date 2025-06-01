@@ -100,7 +100,7 @@ warn_log() {
 
 verbose_log() {
     if [ "$VERBOSE" = true ]; then
-        echo -e "\033[1;34m[$(date '+%Y-%m-%d %H:%M:%S')]\033[0m \033[1;37m[VERBOSE] $1\033[0m" | tee -a "$LOG_FILE"
+        echo -e "\033[1;34m[$(date '+%Y-%m-%d %H:%M:%S')]\033[0m \033[1;37m[VERBOSE] $1\033[0m" | tee -a "$LOG_FILE" >&2
     fi
 }
 
@@ -221,8 +221,8 @@ determine_optimal_qupath() {
     local qupath_051_available=false
     local qupath_06_available=false
     
-    # Check CUDA availability (redirect to avoid output capture)
-    if check_cuda_availability >> "$LOG_FILE" 2>&1; then
+    # Check CUDA availability (redirect all output to avoid capture)
+    if check_cuda_availability >&2; then
         cuda_available=true
     fi
     
