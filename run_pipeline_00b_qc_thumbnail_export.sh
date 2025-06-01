@@ -34,6 +34,7 @@ show_help() {
     echo "  -q, --qupath PATH      Path to QuPath executable (optional, auto-detects if not specified)"
     echo "  -m, --mode MODE        Force processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
     echo "  -o, --output DIR       Output directory for thumbnails (default: qc_thumbnails)"
+    echo "  -n, --num-images NUM   Number of images to process (default: all images)"
     echo "  -c, --credentials FILE Path to Google Drive credentials file (default: drive_credentials.json)"
     echo "  -t, --token FILE       Path to token file (default: token.json)"
     echo "  -f, --folder NAME      Custom Google Drive folder name"
@@ -55,6 +56,8 @@ show_help() {
     echo "  $0 -p project.qpproj -q /path/to/QuPath  # Custom QuPath path"
     echo "  $0 -s -m cpu                             # Force CPU mode"
     echo "  $0 -a -m gpu -v                          # Force GPU mode with verbose logging"
+    echo "  $0 -p project.qpproj -n 10               # Process only first 10 images"
+    echo "  $0 -s -n 5 -v                            # Process 5 images with verbose output"
     echo
     echo "Auto-detection Logic:"
     echo "  1. Check CUDA availability with nvidia-smi"
@@ -346,6 +349,7 @@ comprehensive_qupath_validation() {
 # =============================================================================
 PROJECT_PATH=""
 OUTPUT_DIR="qc_thumbnails"
+NUM_IMAGES=""
 CREDENTIALS_FILE="drive_credentials.json"
 TOKEN_FILE="token.json"
 CUSTOM_FOLDER_NAME=""
@@ -372,6 +376,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -o|--output)
             OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        -n|--num-images)
+            NUM_IMAGES="$2"
             shift 2
             ;;
         -c|--credentials)
@@ -556,6 +564,11 @@ log "Selected QuPath: $SELECTED_QUPATH_PATH (version: $DETECTED_QUPATH_VERSION)"
 log "CUDA available: $CUDA_AVAILABLE"
 log "Output directory: $OUTPUT_DIR"
 log "Projects to process: ${#PROJECTS_TO_PROCESS[@]}"
+if [ -n "$NUM_IMAGES" ]; then
+    log "Number of images per project: $NUM_IMAGES"
+else
+    log "Number of images per project: all images"
+fi
 log "Upload to Google Drive: $UPLOAD_TO_DRIVE"
 log "Verbose logging: $VERBOSE"
 log "QC Groovy script: $QC_GROOVY_SCRIPT"
@@ -578,10 +591,19 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Processing project: $project_name"
     log "Project file: $project"
     
+    # Prepare QuPath arguments
+    if [ -n "$NUM_IMAGES" ]; then
+        QUPATH_ARGS="--args=$project_output_dir,$NUM_IMAGES"
+        log "Processing first $NUM_IMAGES images from project"
+    else
+        QUPATH_ARGS="--args=$project_output_dir"
+        log "Processing all images from project"
+    fi
+    
     # Step 1: Export QC thumbnails with TRIDENT annotations
     log "Exporting QC thumbnails with existing annotations..."
     if "$SELECTED_QUPATH_PATH" script --project="$project" \
-                      --args="$project_output_dir" \
+                      $QUPATH_ARGS \
                       "$QC_GROOVY_SCRIPT" \
                       >> "$QUPATH_QC_LOG" 2>&1; then
         log "Successfully exported QC thumbnails for project: $project_name"

@@ -32,13 +32,28 @@ def THUMBNAIL_WIDTH = 2048  // High resolution for QC
 def ANNOTATION_STROKE_WIDTH = 8.0f
 def ANNOTATION_COLOR = Color.GREEN
 def TRIDENT_CLASS_NAME = "Tissue (TRIDENT)"
+def DEFAULT_MAX_IMAGES = -1  // Process all images by default
 
-// Expected argument:
+// Expected arguments:
 // args[0]: Optional output directory path (if not provided, uses QC_OUTPUT_DIR)
+// args[1]: Optional max number of images to process (if not provided or -1, processes all images)
 
 def outputDir = QC_OUTPUT_DIR
 if (args.size() > 0 && !args[0].isEmpty()) {
     outputDir = args[0]
+}
+
+def maxImages = DEFAULT_MAX_IMAGES
+if (args.size() > 1 && !args[1].isEmpty()) {
+    try {
+        maxImages = Integer.parseInt(args[1])
+        if (maxImages <= 0) {
+            maxImages = DEFAULT_MAX_IMAGES  // Process all if invalid number
+        }
+    } catch (NumberFormatException e) {
+        println "Warning: Invalid number for max images '${args[1]}', processing all images"
+        maxImages = DEFAULT_MAX_IMAGES
+    }
 }
 
 def outputDirectory = new File(outputDir)
@@ -53,9 +68,17 @@ if (project == null) {
     return
 }
 
+def totalImages = project.getImageList().size()
+def imagesToProcess = (maxImages > 0) ? Math.min(totalImages, maxImages) : totalImages
+
 println "Starting QC thumbnail export process..."
 println "Output directory: ${outputDirectory.getAbsolutePath()}"
-println "Processing ${project.getImageList().size()} images..."
+println "Total images in project: ${totalImages}"
+if (maxImages > 0) {
+    println "Processing first ${imagesToProcess} images for QC (limited by argument)..."
+} else {
+    println "Processing all ${imagesToProcess} images..."
+}
 
 def exportedCount = 0
 def errorCount = 0
@@ -67,15 +90,22 @@ def summaryWriter = summaryFile.newWriter()
 summaryWriter.writeLine("QuPath QC Thumbnail Export Summary")
 summaryWriter.writeLine("Generated: ${new Date()}")
 summaryWriter.writeLine("Project: ${project.getPath()}")
+summaryWriter.writeLine("Total images in project: ${totalImages}")
+summaryWriter.writeLine("Images processed: ${imagesToProcess}")
+if (maxImages > 0) {
+    summaryWriter.writeLine("Limited by argument: ${maxImages}")
+}
 summaryWriter.writeLine("=" * 50)
 
-project.getImageList().eachWithIndex { entry, index ->
+// Process images (limited by maxImages if specified)
+def imageList = (maxImages > 0) ? project.getImageList().take(maxImages) : project.getImageList()
+imageList.eachWithIndex { entry, index ->
     try {
         def imageData = entry.readImageData()
         def server = imageData.getServer()
         def imageName = GeneralTools.stripExtension(server.getMetadata().getName())
         
-        println "Processing (${index + 1}/${project.getImageList().size()}): ${imageName}"
+        println "Processing (${index + 1}/${imagesToProcess}): ${imageName}"
         
         // Get TRIDENT annotations
         def hierarchy = imageData.getHierarchy()
@@ -193,7 +223,8 @@ project.getImageList().eachWithIndex { entry, index ->
 // Write summary
 summaryWriter.writeLine("=" * 50)
 summaryWriter.writeLine("SUMMARY:")
-summaryWriter.writeLine("Total images processed: ${project.getImageList().size()}")
+summaryWriter.writeLine("Total images in project: ${totalImages}")
+summaryWriter.writeLine("Images processed: ${imagesToProcess}")
 summaryWriter.writeLine("Successfully exported: ${exportedCount}")
 summaryWriter.writeLine("Images with no annotations: ${noAnnotationCount}")
 summaryWriter.writeLine("Errors encountered: ${errorCount}")
@@ -201,6 +232,8 @@ summaryWriter.close()
 
 println "QC thumbnail export completed!"
 println "Summary:"
+println "  Total images in project: ${totalImages}"
+println "  Images processed: ${imagesToProcess}"
 println "  Successfully exported: ${exportedCount} thumbnails"
 println "  Images with no annotations: ${noAnnotationCount}"
 println "  Errors encountered: ${errorCount}"
