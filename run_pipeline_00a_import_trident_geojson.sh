@@ -312,25 +312,93 @@ process_project() {
         return 1
     fi
     
-    echo
-    echo -e "\033[1;36m=== QuPath Import Output ===\033[0m"
+    echo -e "\033[1;36m=== QuPath Pre-Import Validation ===\033[0m"
     
-    # Run the GeoJSON import script - show output on console AND log to file
+    # Create a temporary script to run validation only
+    local temp_validation_script="/tmp/validation_only_${RANDOM}.groovy"
+    
+    # Extract validation portion from main script (everything before "STARTING IMPORT PROCESS")
+    sed '/=== STARTING IMPORT PROCESS ===/q' "$GROOVY_SCRIPT" > "$temp_validation_script"
+    echo 'return // Exit after validation' >> "$temp_validation_script"
+    
+    # Run validation and show output on console
     if "$QUPATH_PATH" script --project="$project_file" \
-                    --save \
                     --args="$TRIDENT_DIR" \
-                    "$GROOVY_SCRIPT" \
+                    "$temp_validation_script" \
                     2>&1 | tee -a "$QUPATH_LOG"; then
-        echo -e "\033[1;36m=== End QuPath Output ===\033[0m"
+        
+        echo -e "\033[1;36m=== End Pre-Import Validation ===\033[0m"
         echo
-        log "Successfully imported TRIDENT GeoJSON for project: $project_name"
-        return 0
+        
+        # Clean up temp script
+        rm -f "$temp_validation_script"
+        
+        # Now run the full import with progress bar
+        echo -e "\033[1;33mImporting TRIDENT annotations...\033[0m"
+        
+        # Run full import in background and capture output to log only
+        if "$QUPATH_PATH" script --project="$project_file" \
+                        --save \
+                        --args="$TRIDENT_DIR" \
+                        "$GROOVY_SCRIPT" \
+                        >> "$QUPATH_LOG" 2>&1 & then
+            
+            local import_pid=$!
+            
+            # Show progress bar while import runs
+            show_import_progress "$import_pid" "$project_name"
+            
+            # Wait for import to complete and get exit code
+            wait "$import_pid"
+            local exit_code=$?
+            
+            if [ $exit_code -eq 0 ]; then
+                echo -e "\n\033[1;32m✓ Successfully imported TRIDENT annotations for $project_name\033[0m"
+                log "Successfully imported TRIDENT GeoJSON for project: $project_name"
+                return 0
+            else
+                echo -e "\n\033[1;31m✗ Failed to import TRIDENT annotations for $project_name\033[0m"
+                error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
+                return 1
+            fi
+        else
+            echo -e "\n\033[1;31m✗ Failed to start import process for $project_name\033[0m"
+            error_log "Failed to start import process for project: $project_name"
+            return 1
+        fi
+        
     else
-        echo -e "\033[1;36m=== End QuPath Output ===\033[0m"
-        echo
-        error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
+        echo -e "\033[1;31m✗ Validation failed for $project_name\033[0m"
+        error_log "Validation failed for project: $project_name"
+        rm -f "$temp_validation_script"
         return 1
     fi
+}
+
+# =============================================================================
+# Function to Show Import Progress
+# =============================================================================
+show_import_progress() {
+    local pid=$1
+    local project_name=$2
+    local progress=0
+    local spinner='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    
+    while kill -0 "$pid" 2>/dev/null; do
+        # Get current spinner character
+        local spin_char=${spinner:$((i % ${#spinner})):1}
+        
+        # Show spinning progress indicator
+        printf "\r\033[1;33m%s\033[0m Importing annotations for %s... \033[1;36m%s\033[0m" \
+               "$spin_char" "$project_name" "$(date '+%H:%M:%S')"
+        
+        ((i++))
+        sleep 0.1
+    done
+    
+    # Clear the spinner line
+    printf "\r\033[K"
 }
 
 # =============================================================================

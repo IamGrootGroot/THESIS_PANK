@@ -68,11 +68,13 @@ println "=== PRE-IMPORT VALIDATION ==="
 // Count images in QuPath project
 def projectImages = project.getImageList()
 def projectImageCount = projectImages.size()
-println "QuPath project images: ${projectImageCount}"
+println "QuPath project entries: ${projectImageCount}"
 
 // Get list of image names from project (without extensions)
 def projectImageNames = []
-projectImages.each { entry ->
+def failedToRead = []
+
+projectImages.eachWithIndex { entry, index ->
     try {
         def imageData = entry.readImageData()
         def server = imageData.getServer()
@@ -80,9 +82,30 @@ projectImages.each { entry ->
         def imageNameNoExt = GeneralTools.stripExtension(imageNameWithExtension)
         projectImageNames.add(imageNameNoExt)
     } catch (Exception e) {
-        println "Warning: Could not read image name from project entry: ${e.getMessage()}"
+        def entryName = "Entry_${index}"
+        try {
+            // Try to get any identifying information
+            entryName = entry.toString()
+        } catch (Exception e2) {
+            // Fallback to index if toString() also fails
+        }
+        failedToRead.add("${entryName}: ${e.getMessage()}")
+        println "Warning: Could not read image ${index + 1}/${projectImageCount} (${entryName}): ${e.getMessage()}"
     }
 }
+
+def readableImageCount = projectImageNames.size()
+def unreadableImageCount = failedToRead.size()
+
+println "QuPath readable images: ${readableImageCount}"
+if (unreadableImageCount > 0) {
+    println "QuPath unreadable images: ${unreadableImageCount}"
+    println "  Unreadable image details:"
+    failedToRead.each { failInfo ->
+        println "    - ${failInfo}"
+    }
+}
+println "Total project entries: ${projectImageCount} = ${readableImageCount} readable + ${unreadableImageCount} unreadable"
 
 // Count GeoJSON files in TRIDENT output
 def geojsonDir = new File(tridentBaseOutputDir, "contours_geojson")
@@ -102,18 +125,23 @@ if (geojsonDir.exists() && geojsonDir.isDirectory()) {
 
 // Check for discrepancies
 println "\n--- VALIDATION RESULTS ---"
-if (projectImageCount == geojsonCount) {
-    println "✓ GOOD: Number of project images matches GeoJSON files (${projectImageCount})"
+if (readableImageCount == geojsonCount) {
+    println "✓ GOOD: Number of readable images matches GeoJSON files (${readableImageCount})"
 } else {
     println "⚠ WARNING: Mismatch detected!"
-    println "  Project images: ${projectImageCount}"
+    println "  Readable images: ${readableImageCount}"
     println "  GeoJSON files: ${geojsonCount}"
-    println "  Difference: ${Math.abs(projectImageCount - geojsonCount)}"
+    println "  Difference: ${Math.abs(readableImageCount - geojsonCount)}"
     
-    if (projectImageCount > geojsonCount) {
-        println "  → Some project images may not have corresponding TRIDENT segmentations"
+    if (readableImageCount > geojsonCount) {
+        println "  → Some readable images may not have corresponding TRIDENT segmentations"
     } else {
-        println "  → Some GeoJSON files may not have corresponding project images"
+        println "  → Some GeoJSON files may not have corresponding readable images"
+    }
+    
+    if (unreadableImageCount > 0) {
+        println "  NOTE: ${unreadableImageCount} images in project are unreadable and excluded from comparison"
+        println "        TRIDENT may have processed these images if they were accessible during segmentation"
     }
 }
 
