@@ -314,181 +314,21 @@ process_project() {
     
     echo -e "\033[1;36m=== QuPath Pre-Import Validation ===\033[0m"
     
-    # Create a temporary script to run validation only (without execution guard)
-    local temp_validation_script="/tmp/validation_only_${RANDOM}.groovy"
-    
-    # Create validation-only script that opens project internally
-    cat > "$temp_validation_script" << EOF
-import qupath.lib.projects.Project
-import qupath.lib.projects.ProjectIO
-import qupath.lib.images.ImageData
-import qupath.lib.common.GeneralTools
-import qupath.lib.io.PathIO
-import qupath.lib.objects.PathObject
-import qupath.lib.objects.classes.PathClassFactory
-import qupath.lib.scripting.QP
-import java.awt.Color
-
-// Validation-only script - opens project and runs validation
-
-if (args.size() < 2) {
-    println "Error: Missing arguments. Required: <project_file> <trident_base_output_dir>"
-    return
-}
-
-def projectFilePath = args[0]
-def tridentBaseOutputDirPath = args[1]
-def tridentBaseOutputDir = new File(tridentBaseOutputDirPath)
-
-if (!tridentBaseOutputDir.exists() || !tridentBaseOutputDir.isDirectory()) {
-    println "Error: TRIDENT base output directory not found: \${tridentBaseOutputDirPath}"
-    return
-}
-
-// Open the project
-def projectFile = new File(projectFilePath)
-if (!projectFile.exists()) {
-    println "Error: Project file not found: \${projectFilePath}"
-    return
-}
-
-def project = ProjectIO.loadProject(projectFile.toURI(), BufferedImage.class, true)
-if (project == null) {
-    println "Error: Could not load project from \${projectFilePath}"
-    return
-}
-
-println "Starting TRIDENT GeoJSON import process..."
-println "Using TRIDENT output base directory: \${tridentBaseOutputDir.getAbsolutePath()}"
-println "=" * 80
-
-// =============================================================================
-// Pre-import Validation and Diagnostics
-// =============================================================================
-println "=== PRE-IMPORT VALIDATION ==="
-
-// Count images in QuPath project
-def projectImages = project.getImageList()
-def projectImageCount = projectImages.size()
-println "QuPath project entries: \${projectImageCount}"
-
-// Get list of image names from project (without extensions)
-def projectImageNames = []
-def failedToRead = []
-
-projectImages.eachWithIndex { entry, index ->
-    try {
-        def imageData = entry.readImageData()
-        def server = imageData.getServer()
-        def imageNameWithExtension = server.getMetadata().getName()
-        def imageNameNoExt = GeneralTools.stripExtension(imageNameWithExtension)
-        projectImageNames.add(imageNameNoExt)
-    } catch (Exception e) {
-        def entryName = "Entry_\${index}"
-        try {
-            // Try to get any identifying information
-            entryName = entry.toString()
-        } catch (Exception e2) {
-            // Fallback to index if toString() also fails
-        }
-        failedToRead.add("\${entryName}: \${e.getMessage()}")
-        println "Warning: Could not read image \${index + 1}/\${projectImageCount} (\${entryName}): \${e.getMessage()}"
-    }
-}
-
-def readableImageCount = projectImageNames.size()
-def unreadableImageCount = failedToRead.size()
-
-println "QuPath readable images: \${readableImageCount}"
-if (unreadableImageCount > 0) {
-    println "QuPath unreadable images: \${unreadableImageCount}"
-    println "  Unreadable image details:"
-    failedToRead.each { failInfo ->
-        println "    - \${failInfo}"
-    }
-}
-println "Total project entries: \${projectImageCount} = \${readableImageCount} readable + \${unreadableImageCount} unreadable"
-
-// Count GeoJSON files in TRIDENT output
-def geojsonDir = new File(tridentBaseOutputDir, "contours_geojson")
-def geojsonFiles = []
-def geojsonCount = 0
-
-if (geojsonDir.exists() && geojsonDir.isDirectory()) {
-    geojsonFiles = geojsonDir.listFiles().findAll { file ->
-        file.isFile() && file.getName().toLowerCase().endsWith(".geojson")
-    }
-    geojsonCount = geojsonFiles.size()
-    println "TRIDENT GeoJSON files found: \${geojsonCount}"
-    println "GeoJSON directory: \${geojsonDir.getAbsolutePath()}"
-} else {
-    println "WARNING: TRIDENT GeoJSON directory not found: \${geojsonDir.getAbsolutePath()}"
-}
-
-// Check for discrepancies
-println "\n--- VALIDATION RESULTS ---"
-if (readableImageCount == geojsonCount) {
-    println "✓ GOOD: Number of readable images matches GeoJSON files (\${readableImageCount})"
-} else {
-    println "⚠ WARNING: Mismatch detected!"
-    println "  Readable images: \${readableImageCount}"
-    println "  GeoJSON files: \${geojsonCount}"
-    println "  Difference: \${Math.abs(readableImageCount - geojsonCount)}"
-    
-    if (readableImageCount > geojsonCount) {
-        println "  → Some readable images may not have corresponding TRIDENT segmentations"
-    } else {
-        println "  → Some GeoJSON files may not have corresponding readable images"
-    }
-    
-    if (unreadableImageCount > 0) {
-        println "  NOTE: \${unreadableImageCount} images in project are unreadable and excluded from comparison"
-        println "        TRIDENT may have processed these images if they were accessible during segmentation"
-    }
-}
-
-// Check for name matches
-if (!geojsonFiles.isEmpty() && !projectImageNames.isEmpty()) {
-    def geojsonNames = geojsonFiles.collect { file -> 
-        GeneralTools.stripExtension(file.getName())
-    }
-    
-    def missingInProject = geojsonNames.findAll { name -> !projectImageNames.contains(name) }
-    def missingInTrident = projectImageNames.findAll { name -> !geojsonNames.contains(name) }
-    
-    if (missingInProject.isEmpty() && missingInTrident.isEmpty()) {
-        println "✓ GOOD: All image names match between project and GeoJSON files"
-    } else {
-        if (!missingInProject.isEmpty()) {
-            println "⚠ GeoJSON files without matching project images:"
-            missingInProject.each { name -> println "  - \${name}.geojson" }
-        }
-        if (!missingInTrident.isEmpty()) {
-            println "⚠ Project images without matching GeoJSON files:"
-            missingInTrident.each { name -> println "  - \${name}" }
-        }
-    }
-}
-
-println "=" * 80
-EOF
-    
-    # Run validation and show output on console (WITHOUT --project flag)
-    if "$QUPATH_PATH" script \
-                    "$temp_validation_script" \
-                    --args "$project_file" "$TRIDENT_DIR" \
-                    2>&1 | tee -a "$QUPATH_LOG"; then
+    # Run validation using original script but filter output to only show validation phase
+    if "$QUPATH_PATH" script --project="$project_file" \
+                    --args="$TRIDENT_DIR" \
+                    "$GROOVY_SCRIPT" \
+                    2>&1 | grep -A 1000 "=== PRE-IMPORT VALIDATION ===" | \
+                    grep -B 1000 "=== STARTING IMPORT PROCESS ===" | \
+                    head -n -1 | tee -a "$QUPATH_LOG"; then
         
         echo -e "\033[1;36m=== End Pre-Import Validation ===\033[0m"
         echo
         
-        # Clean up temp script
-        rm -f "$temp_validation_script"
-        
         # Now run the full import with progress bar
         echo -e "\033[1;33mImporting TRIDENT annotations...\033[0m"
         
-        # Create a temporary import-only script that opens the project internally
+        # Create a temporary import-only script that opens project internally
         local temp_import_script="/tmp/import_only_${RANDOM}.groovy"
         
         cat > "$temp_import_script" << EOF
@@ -532,7 +372,6 @@ if (project == null) {
 }
 
 println "=== STARTING IMPORT PROCESS ==="
-println "Processing project: \${project.getName()}"
 
 def importedCount = 0
 def notFoundCount = 0
@@ -607,7 +446,7 @@ println "  GeoJSON files not found for: \${notFoundCount} images."
 println "  Errors during import for: \${errorCount} images."
 EOF
         
-        # Run import in background and capture output to log only (WITHOUT --project flag)
+        # Run import in background and capture output to log only
         if "$QUPATH_PATH" script \
                         "$temp_import_script" \
                         --args "$project_file" "$TRIDENT_DIR" \
@@ -644,8 +483,6 @@ EOF
     else
         echo -e "\033[1;31m✗ Validation failed for $project_name\033[0m"
         error_log "Validation failed for project: $project_name"
-        rm -f "$temp_validation_script"
-        rm -f "$temp_import_script"
         return 1
     fi
 }
