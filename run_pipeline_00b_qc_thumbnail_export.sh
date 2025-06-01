@@ -533,6 +533,16 @@ fi
 # =============================================================================
 # Main Pipeline
 # =============================================================================
+# Determine script directory for Groovy files
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QC_GROOVY_SCRIPT="$SCRIPT_DIR/00b_export_annotated_thumbnails_qc.groovy"
+
+# Validate QC script exists
+if [ ! -f "$QC_GROOVY_SCRIPT" ]; then
+    error_log "QC Groovy script not found: $QC_GROOVY_SCRIPT"
+    exit 1
+fi
+
 clear
 echo -e "\033[1;35m===============================================\033[0m"
 echo -e "\033[1;35m     PANK Thesis - QC Thumbnail Export Only  \033[0m"
@@ -548,6 +558,7 @@ log "Output directory: $OUTPUT_DIR"
 log "Projects to process: ${#PROJECTS_TO_PROCESS[@]}"
 log "Upload to Google Drive: $UPLOAD_TO_DRIVE"
 log "Verbose logging: $VERBOSE"
+log "QC Groovy script: $QC_GROOVY_SCRIPT"
 
 echo
 
@@ -571,7 +582,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     log "Exporting QC thumbnails with existing annotations..."
     if "$SELECTED_QUPATH_PATH" script --project="$project" \
                       --args="$project_output_dir" \
-                      00b_export_annotated_thumbnails_qc.groovy \
+                      "$QC_GROOVY_SCRIPT" \
                       >> "$QUPATH_QC_LOG" 2>&1; then
         log "Successfully exported QC thumbnails for project: $project_name"
         ((SUCCESSFUL_EXPORTS++))
