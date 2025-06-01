@@ -8,6 +8,7 @@ It uses a pre-generated token file for authentication.
 """
 
 import os
+import sys
 import argparse
 import logging
 from pathlib import Path
@@ -216,18 +217,18 @@ def main():
         qc_thumbnails_dir = Path(args.qc_thumbnails_dir)
     else:
         logger.error("Please specify either --qc_thumbnails_dir or --trident_output_dir")
-        return
+        sys.exit(1)
     
     credentials_file = Path(args.credentials_file) if args.credentials_file else None
     token_file = Path(args.token_file)
 
     if not qc_thumbnails_dir.exists():
         logger.error(f"QC thumbnails directory not found: {qc_thumbnails_dir}")
-        return
+        sys.exit(1)
 
     if not token_file.exists():
         logger.error(f"Token file not found: {token_file}. Please run generate_drive_token.py first.")
-        return
+        sys.exit(1)
 
     # Credentials file is optional if token is valid
     if credentials_file and not credentials_file.exists():
@@ -244,13 +245,13 @@ def main():
     logger.info("Authenticating with Google Drive...")
     service = authenticate_google_drive(str(credentials_file) if credentials_file else None, str(token_file))
     if not service:
-        return
+        sys.exit(1)
 
     # Create folder in Google Drive
     logger.info(f"Creating folder '{folder_name}' in Google Drive...")
     folder_id = create_drive_folder(service, folder_name)
     if not folder_id:
-        return
+        sys.exit(1)
 
     # Find QC thumbnail files
     logger.info("Searching for QC thumbnail files...")
@@ -258,7 +259,7 @@ def main():
     
     if not thumbnail_files:
         logger.warning("No QC thumbnail files found in specified directory")
-        return
+        sys.exit(1)
 
     logger.info(f"Found {len(thumbnail_files)} QC thumbnail files:")
     for thumb_file in thumbnail_files:
@@ -284,6 +285,7 @@ def main():
             upload_text_file_to_drive(service, summary_content, "qc_summary.txt", folder_id)
         except Exception as e:
             logger.error(f"Failed to upload summary file: {e}")
+            sys.exit(1)
 
     logger.info(f"Upload complete! {uploaded_count} files uploaded, {failed_count} failed")
     logger.info(f"Google Drive folder ID: {folder_id}")
