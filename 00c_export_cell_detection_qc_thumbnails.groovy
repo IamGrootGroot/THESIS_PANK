@@ -34,12 +34,27 @@ def NUCLEUS_COLOR = Color.CYAN
 def TRIDENT_CLASS_NAME = "Tissue (TRIDENT)"
 def NUCLEUS_CLASS_NAME = "Nucleus"
 
-// Expected argument:
+// Expected arguments:
 // args[0]: Optional output directory path (if not provided, uses QC_OUTPUT_DIR)
+// args[1]: Optional number of images to process (if not provided or "all", processes all images)
 
 def outputDir = QC_OUTPUT_DIR
 if (args.size() > 0 && !args[0].isEmpty()) {
     outputDir = args[0]
+}
+
+def maxImages = -1  // -1 means process all images
+if (args.size() > 1 && !args[1].isEmpty() && args[1] != "all") {
+    try {
+        maxImages = Integer.parseInt(args[1])
+        if (maxImages <= 0) {
+            println "Warning: Invalid number of images specified (${args[1]}), processing all images"
+            maxImages = -1
+        }
+    } catch (NumberFormatException e) {
+        println "Warning: Could not parse number of images (${args[1]}), processing all images"
+        maxImages = -1
+    }
 }
 
 def outputDirectory = new File(outputDir)
@@ -56,7 +71,12 @@ if (project == null) {
 
 println "Starting Cell Detection QC thumbnail export process..."
 println "Output directory: ${outputDirectory.getAbsolutePath()}"
-println "Processing ${project.getImageList().size()} images..."
+def totalProjectImages = project.getImageList().size()
+def imagesToProcess = (maxImages > 0 && maxImages < totalProjectImages) ? maxImages : totalProjectImages
+println "Processing ${imagesToProcess} of ${totalProjectImages} images..."
+if (maxImages > 0 && maxImages < totalProjectImages) {
+    println "Note: Limited to first ${maxImages} images as requested"
+}
 
 def exportedCount = 0
 def errorCount = 0
@@ -78,13 +98,19 @@ def totalCellsDetected = 0
 def totalTridentAnnotations = 0
 
 project.getImageList().eachWithIndex { entry, index ->
+    // Check if we've reached the maximum number of images to process
+    if (maxImages > 0 && index >= maxImages) {
+        println "Reached maximum number of images to process (${maxImages}), stopping..."
+        return false  // This will exit the eachWithIndex closure
+    }
+    
     def imageName = "Unknown"  // Declare outside try block
     try {
         def imageData = entry.readImageData()
         def server = imageData.getServer()
         imageName = GeneralTools.stripExtension(server.getMetadata().getName())
         
-        println "Processing (${index + 1}/${project.getImageList().size()}): ${imageName}"
+        println "Processing (${index + 1}/${imagesToProcess}): ${imageName}"
         
         // Get hierarchy and all objects
         def hierarchy = imageData.getHierarchy()
@@ -247,7 +273,11 @@ project.getImageList().eachWithIndex { entry, index ->
 // Write comprehensive summary
 summaryWriter.writeLine("=" * 60)
 summaryWriter.writeLine("COMPREHENSIVE SUMMARY:")
-summaryWriter.writeLine("Total images processed: ${project.getImageList().size()}")
+summaryWriter.writeLine("Total images in project: ${totalProjectImages}")
+summaryWriter.writeLine("Images processed: ${exportedCount + errorCount}")
+if (maxImages > 0 && maxImages < totalProjectImages) {
+    summaryWriter.writeLine("Note: Processing limited to first ${maxImages} images")
+}
 summaryWriter.writeLine("Successfully exported: ${exportedCount}")
 summaryWriter.writeLine("Images with no TRIDENT annotations: ${noAnnotationCount}")
 summaryWriter.writeLine("Images with no cell detections: ${noCellsCount}")
@@ -256,9 +286,10 @@ summaryWriter.writeLine("")
 summaryWriter.writeLine("DETECTION STATISTICS:")
 summaryWriter.writeLine("Total TRIDENT annotations: ${totalTridentAnnotations}")
 summaryWriter.writeLine("Total cells detected: ${totalCellsDetected}")
-if (project.getImageList().size() > 0) {
-    def avgCellsPerImage = totalCellsDetected / project.getImageList().size()
-    summaryWriter.writeLine("Average cells per image: ${avgCellsPerImage.round(1)}")
+def processedImages = exportedCount + errorCount
+if (processedImages > 0) {
+    def avgCellsPerImage = totalCellsDetected / processedImages
+    summaryWriter.writeLine("Average cells per processed image: ${avgCellsPerImage.round(1)}")
 }
 summaryWriter.writeLine("")
 summaryWriter.writeLine("COLOR LEGEND:")
@@ -269,10 +300,16 @@ summaryWriter.close()
 
 println "Cell Detection QC thumbnail export completed!"
 println "Summary:"
+println "  Total images in project: ${totalProjectImages}"
+if (maxImages > 0 && maxImages < totalProjectImages) {
+    println "  Images processed (limited): ${exportedCount + errorCount} of ${totalProjectImages}"
+} else {
+    println "  Images processed: ${exportedCount + errorCount}"
+}
 println "  Successfully exported: ${exportedCount} thumbnails"
 println "  Images with no TRIDENT annotations: ${noAnnotationCount}"
 println "  Images with no cell detections: ${noCellsCount}"
 println "  Errors encountered: ${errorCount}"
-println "  Total cells detected across all images: ${totalCellsDetected}"
+println "  Total cells detected across processed images: ${totalCellsDetected}"
 println "  Output directory: ${outputDirectory.getAbsolutePath()}"
 println "  Summary file: ${summaryFile.getAbsolutePath()}" 

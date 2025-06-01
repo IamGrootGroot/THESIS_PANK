@@ -30,6 +30,7 @@ show_help() {
     echo "  -s, --test           Export QC for test project only (QuPath_MP_PDAC5)"
     echo "  -a, --all            Export QC for all QuPath projects"
     echo "  -o, --output DIR     Output directory for QC thumbnails (default: $QC_OUTPUT_DIR)"
+    echo "  -n, --num-images N   Process only first N images (default: all images)"
     echo "  -m, --mode MODE      Processing mode: 'cpu', 'gpu', or 'auto' (default: auto)"
     echo "  -q, --qupath PATH    Force specific QuPath executable path"
     echo "  -u, --upload         Upload to Google Drive after export"
@@ -44,9 +45,9 @@ show_help() {
     echo
     echo "Examples:"
     echo "  $0 -s                           # Test project QC with auto-detection"
-    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -u -t token.json -m gpu"
-    echo "  $0 -a -u -t /path/to/token.json -m cpu  # All projects with CPU mode and upload"
-    echo "  $0 -s -o custom_qc_dir -v       # Custom output dir with verbose logging"
+    echo "  $0 -p QuPath_MP_PDAC100/project.qpproj -n 10 -u -t token.json -m gpu"
+    echo "  $0 -a -n 5 -u -t /path/to/token.json -m cpu  # All projects, first 5 images each with CPU mode and upload"
+    echo "  $0 -s -o custom_qc_dir -n 10 -v # Custom output dir, first 10 images with verbose logging"
     echo
     echo "Note: For Google Drive upload, you need:"
     echo "      - token.json (generated with generate_drive_token.py)"
@@ -177,6 +178,7 @@ CUSTOM_QUPATH_PATH=""
 UPLOAD_TO_DRIVE=false
 TOKEN_PATH=""
 VERBOSE=false
+NUM_IMAGES="all"  # Default to processing all images
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -194,6 +196,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -o|--output)
             QC_OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        -n|--num-images)
+            NUM_IMAGES="$2"
             shift 2
             ;;
         -m|--mode)
@@ -243,6 +249,17 @@ if [[ ! "$FORCE_MODE" =~ ^(auto|cpu|gpu)$ ]]; then
     show_help
 fi
 
+# Validate num-images parameter
+if [[ "$NUM_IMAGES" != "all" ]] && ! [[ "$NUM_IMAGES" =~ ^[0-9]+$ ]]; then
+    error_log "Invalid num-images value: $NUM_IMAGES. Must be 'all' or a positive integer"
+    show_help
+fi
+
+if [[ "$NUM_IMAGES" =~ ^[0-9]+$ ]] && [ "$NUM_IMAGES" -le 0 ]; then
+    error_log "Invalid num-images value: $NUM_IMAGES. Must be greater than 0"
+    show_help
+fi
+
 # Validate token file if upload is requested
 if [ "$UPLOAD_TO_DRIVE" = true ]; then
     if [ -z "$TOKEN_PATH" ]; then
@@ -270,6 +287,7 @@ echo
 log "Starting unified cell detection QC export"
 log "Mode: $FORCE_MODE"
 log "Output directory: $QC_OUTPUT_DIR"
+log "Number of images: $NUM_IMAGES"
 log "Upload to Drive: $UPLOAD_TO_DRIVE"
 log "Verbose logging: $VERBOSE"
 
@@ -324,6 +342,7 @@ export_qc_for_project() {
     if "$SELECTED_QUPATH_PATH" script \
             --project="$project_file" \
             --args "$project_qc_dir" \
+            --args "$NUM_IMAGES" \
             "$QC_SCRIPT" \
             >> "$QUPATH_LOG" 2>&1; then
         log "QC export completed for $project_name" >&2
