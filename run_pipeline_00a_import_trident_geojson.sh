@@ -476,7 +476,7 @@ EOF
     # Run validation and show output on console (WITHOUT --project flag)
     if "$QUPATH_PATH" script \
                     "$temp_validation_script" \
-                    --args="$project_file" "$TRIDENT_DIR" \
+                    --args "$project_file" "$TRIDENT_DIR" \
                     2>&1 | tee -a "$QUPATH_LOG"; then
         
         echo -e "\033[1;36m=== End Pre-Import Validation ===\033[0m"
@@ -610,7 +610,7 @@ EOF
         # Run import in background and capture output to log only (WITHOUT --project flag)
         if "$QUPATH_PATH" script \
                         "$temp_import_script" \
-                        --args="$project_file" "$TRIDENT_DIR" \
+                        --args "$project_file" "$TRIDENT_DIR" \
                         >> "$QUPATH_LOG" 2>&1 & then
             
             local import_pid=$!
