@@ -57,6 +57,19 @@ QUPATH_LOG="${LOG_DIR}/qupath_trident_${TIMESTAMP}.log"
 mkdir -p "$LOG_DIR"
 
 # =============================================================================
+# Script Path Configuration
+# =============================================================================
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GROOVY_SCRIPT="$SCRIPT_DIR/00a_import_trident_geojson.groovy"
+
+# Validate Groovy script exists
+if [ ! -f "$GROOVY_SCRIPT" ]; then
+    echo "ERROR: Groovy script not found at $GROOVY_SCRIPT"
+    exit 1
+fi
+
+# =============================================================================
 # Logging Functions
 # =============================================================================
 # Function to log normal messages with timestamp and terminal output
@@ -250,7 +263,7 @@ process_project() {
     # Run the GeoJSON import script
     if "$QUPATH_PATH" script --project="$project_file" \
                     --args="$TRIDENT_DIR" \
-                    00a_import_trident_geojson.groovy \
+                    "$GROOVY_SCRIPT" \
                     >> "$QUPATH_LOG" 2>&1; then
         log "Successfully imported TRIDENT GeoJSON for project: $project_name"
         return 0
