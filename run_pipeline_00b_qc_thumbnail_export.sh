@@ -599,11 +599,12 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     
     # Prepare QuPath arguments
     if [ -n "$NUM_IMAGES" ]; then
-        QUPATH_ARGS="--args=$project_output_dir,$NUM_IMAGES"
         log "Processing first $NUM_IMAGES images from project"
+        # Use proper QuPath argument format with space separation
+        QUPATH_CMD=("$SELECTED_QUPATH_PATH" script --project="$project" --args="$project_output_dir" --args="$NUM_IMAGES" "$QC_GROOVY_SCRIPT")
     else
-        QUPATH_ARGS="--args=$project_output_dir"
         log "Processing all images from project"
+        QUPATH_CMD=("$SELECTED_QUPATH_PATH" script --project="$project" --args="$project_output_dir" "$QC_GROOVY_SCRIPT")
     fi
     
     # Clean up any existing lock files from previous interrupted runs
@@ -620,10 +621,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
     
     # Step 1: Export QC thumbnails with TRIDENT annotations
     log "Exporting QC thumbnails with existing annotations..."
-    if "$SELECTED_QUPATH_PATH" script --project="$project" \
-                      $QUPATH_ARGS \
-                      "$QC_GROOVY_SCRIPT" \
-                      >> "$QUPATH_QC_LOG" 2>&1; then
+    if "${QUPATH_CMD[@]}" >> "$QUPATH_QC_LOG" 2>&1; then
         log "Successfully exported QC thumbnails for project: $project_name"
         ((SUCCESSFUL_EXPORTS++))
         
