@@ -221,8 +221,8 @@ determine_optimal_qupath() {
     local qupath_051_available=false
     local qupath_06_available=false
     
-    # Check CUDA availability
-    if check_cuda_availability; then
+    # Check CUDA availability (redirect to avoid output capture)
+    if check_cuda_availability >> "$LOG_FILE" 2>&1; then
         cuda_available=true
     fi
     
@@ -237,18 +237,14 @@ determine_optimal_qupath() {
         verbose_log "QuPath 0.6 available at: $QUPATH_06_PATH"
     fi
     
-    # Decision logic (prefer the same as processing)
+    # Decision logic (prefer the same as processing) - only echo the path
     if [ "$cuda_available" = true ] && [ "$qupath_051_available" = true ]; then
         echo "$QUPATH_051_PATH"
-        log "Auto-selected QuPath 0.5.1 for QC export (matches GPU processing)" >&2
     elif [ "$qupath_06_available" = true ]; then
         echo "$QUPATH_06_PATH"
-        log "Auto-selected QuPath 0.6 for QC export (matches CPU processing)" >&2
     elif [ "$qupath_051_available" = true ]; then
         echo "$QUPATH_051_PATH"
-        warn_log "Using QuPath 0.5.1 for QC export (CUDA may not be available)" >&2
     else
-        error_log "No suitable QuPath installation found for QC export" >&2
         return 1
     fi
 }
@@ -260,18 +256,14 @@ setup_qupath_for_mode() {
         "gpu")
             if [ -f "$QUPATH_051_PATH" ] && [ -x "$QUPATH_051_PATH" ]; then
                 echo "$QUPATH_051_PATH"
-                log "Using QuPath 0.5.1 for GPU mode QC export" >&2
             else
-                error_log "QuPath 0.5.1 not found for GPU mode: $QUPATH_051_PATH" >&2
                 return 1
             fi
             ;;
         "cpu")
             if [ -f "$QUPATH_06_PATH" ] && [ -x "$QUPATH_06_PATH" ]; then
                 echo "$QUPATH_06_PATH"
-                log "Using QuPath 0.6 for CPU mode QC export" >&2
             else
-                error_log "QuPath 0.6 not found for CPU mode: $QUPATH_06_PATH" >&2
                 return 1
             fi
             ;;
@@ -279,7 +271,6 @@ setup_qupath_for_mode() {
             determine_optimal_qupath
             ;;
         *)
-            error_log "Invalid mode: $mode" >&2
             return 1
             ;;
     esac
@@ -506,9 +497,31 @@ if [ -n "$CUSTOM_QUPATH_PATH" ]; then
 else
     # Use auto-detection
     SELECTED_QUPATH_PATH=$(setup_qupath_for_mode "$FORCE_MODE")
-    if [ $? -ne 0 ]; then
+    if [ $? -ne 0 ] || [ -z "$SELECTED_QUPATH_PATH" ]; then
+        error_log "Failed to determine QuPath path"
         exit 1
     fi
+    
+    # Log the selection result
+    case "$FORCE_MODE" in
+        "auto")
+            if [[ "$SELECTED_QUPATH_PATH" == *"0.5.1"* ]]; then
+                if [ "$CUDA_AVAILABLE" = true ]; then
+                    log "Auto-selected QuPath 0.5.1 for QC export (matches GPU processing)"
+                else
+                    warn_log "Auto-selected QuPath 0.5.1 for QC export (CUDA not available)"
+                fi
+            else
+                log "Auto-selected QuPath 0.6 for QC export (matches CPU processing)"
+            fi
+            ;;
+        "gpu")
+            log "Using QuPath 0.5.1 for forced GPU mode QC export"
+            ;;
+        "cpu")
+            log "Using QuPath 0.6 for forced CPU mode QC export"
+            ;;
+    esac
     
     # Validate the auto-selected QuPath
     if ! comprehensive_qupath_validation "$SELECTED_QUPATH_PATH" "$FORCE_MODE" "$CUDA_AVAILABLE"; then
