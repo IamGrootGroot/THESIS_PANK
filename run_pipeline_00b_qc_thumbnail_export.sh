@@ -550,10 +550,18 @@ fi
 # Determine script directory for Groovy files
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QC_GROOVY_SCRIPT="$SCRIPT_DIR/00b_export_annotated_thumbnails_qc.groovy"
+UPLOAD_SCRIPT="$SCRIPT_DIR/upload_qc_thumbnails_to_drive.py"
 
 # Validate QC script exists
 if [ ! -f "$QC_GROOVY_SCRIPT" ]; then
     error_log "QC Groovy script not found: $QC_GROOVY_SCRIPT"
+    exit 1
+fi
+
+# Validate upload script exists (if upload is requested)
+if [ "$UPLOAD_TO_DRIVE" = true ] && [ ! -f "$UPLOAD_SCRIPT" ]; then
+    error_log "Upload script not found: $UPLOAD_SCRIPT"
+    error_log "Please ensure upload_qc_thumbnails_to_drive.py is in the same directory as this script"
     exit 1
 fi
 
@@ -647,7 +655,7 @@ for project in "${PROJECTS_TO_PROCESS[@]}"; do
                 fi
                 
                 # Upload using Python script
-                if python3 upload_qc_thumbnails_to_drive.py \
+                if python3 "$UPLOAD_SCRIPT" \
                     --qc_thumbnails_dir "$project_output_dir" \
                     --credentials_file "$CREDENTIALS_FILE" \
                     --token_file "$TOKEN_FILE" \
