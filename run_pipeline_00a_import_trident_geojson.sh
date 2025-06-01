@@ -12,9 +12,9 @@
 # =============================================================================
 # Default QuPath Configuration
 # =============================================================================
-# Default QuPath path (can be overridden with -q option)
-# Update this path to match your most common QuPath installation
-DEFAULT_QUPATH_PATH="${QUPATH_PATH:-/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath}"
+# QuPath installation paths (same as unified pipeline)
+QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
 
 # =============================================================================
 # Help Function
@@ -104,6 +104,54 @@ progress_bar() {
            "$(printf '%0.s#' $(seq 1 $completed))" \
            "$(printf '%0.s-' $(seq 1 $remaining))" \
            "$percentage"
+}
+
+# =============================================================================
+# QuPath Auto-Detection Functions (from unified pipeline)
+# =============================================================================
+check_cuda_availability() {
+    if command -v nvidia-smi &> /dev/null; then
+        if nvidia-smi &> /dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+determine_optimal_qupath() {
+    local cuda_available=false
+    local qupath_051_available=false
+    local qupath_06_available=false
+    
+    # Check CUDA availability
+    if check_cuda_availability; then
+        cuda_available=true
+    fi
+    
+    # Check QuPath installations
+    if [ -f "$QUPATH_051_PATH" ] && [ -x "$QUPATH_051_PATH" ]; then
+        qupath_051_available=true
+    fi
+    
+    if [ -f "$QUPATH_06_PATH" ] && [ -x "$QUPATH_06_PATH" ]; then
+        qupath_06_available=true
+    fi
+    
+    # Decision logic (prefer 0.5.1 when available)
+    if [ "$qupath_051_available" = true ]; then
+        echo "$QUPATH_051_PATH"
+        if [ "$cuda_available" = true ]; then
+            log "Auto-selected QuPath 0.5.1 (CUDA available for optimal performance)" >&2
+        else
+            log "Auto-selected QuPath 0.5.1 (preferred version)" >&2
+        fi
+    elif [ "$qupath_06_available" = true ]; then
+        echo "$QUPATH_06_PATH"
+        log "Auto-selected QuPath 0.6 (0.5.1 not available)" >&2
+    else
+        error_log "No suitable QuPath installation found" >&2
+        return 1
+    fi
 }
 
 # Redirect all output to log files while maintaining terminal output
@@ -222,14 +270,18 @@ log "Using absolute TRIDENT path: $TRIDENT_DIR"
 # =============================================================================
 # QuPath Path Configuration
 # =============================================================================
-# Use custom QuPath path if provided, otherwise use default
+# Use custom QuPath path if provided, otherwise use auto-detection
 if [ -n "$CUSTOM_QUPATH_PATH" ]; then
     QUPATH_PATH="$CUSTOM_QUPATH_PATH"
     log "Using custom QuPath path: $QUPATH_PATH"
 else
-    # Use default QuPath path from script configuration
-    QUPATH_PATH="$DEFAULT_QUPATH_PATH"
-    log "Using default QuPath path: $QUPATH_PATH"
+    # Use auto-detection to prefer QuPath 0.5.1 when available
+    QUPATH_PATH=$(determine_optimal_qupath)
+    if [ $? -ne 0 ] || [ -z "$QUPATH_PATH" ]; then
+        error_log "Failed to determine optimal QuPath installation"
+        exit 1
+    fi
+    log "Using auto-detected QuPath path: $QUPATH_PATH"
 fi
 
 # Validate QuPath installation
@@ -238,7 +290,7 @@ if [ ! -f "$QUPATH_PATH" ]; then
     if [ -n "$CUSTOM_QUPATH_PATH" ]; then
         error_log "Custom QuPath path is invalid"
     else
-        error_log "Please set the correct path in the script or use -q option"
+        error_log "Auto-detection failed to find a valid QuPath installation"
     fi
     exit 1
 fi
