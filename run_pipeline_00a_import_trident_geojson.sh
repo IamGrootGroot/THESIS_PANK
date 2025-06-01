@@ -260,14 +260,21 @@ process_project() {
         return 1
     fi
     
-    # Run the GeoJSON import script
+    echo
+    echo -e "\033[1;36m=== QuPath Import Output ===\033[0m"
+    
+    # Run the GeoJSON import script - show output on console AND log to file
     if "$QUPATH_PATH" script --project="$project_file" \
                     --args="$TRIDENT_DIR" \
                     "$GROOVY_SCRIPT" \
-                    >> "$QUPATH_LOG" 2>&1; then
+                    2>&1 | tee -a "$QUPATH_LOG"; then
+        echo -e "\033[1;36m=== End QuPath Output ===\033[0m"
+        echo
         log "Successfully imported TRIDENT GeoJSON for project: $project_name"
         return 0
     else
+        echo -e "\033[1;36m=== End QuPath Output ===\033[0m"
+        echo
         error_log "Failed to import TRIDENT GeoJSON for project: $project_name"
         return 1
     fi
