@@ -22,6 +22,28 @@ import java.awt.BasicStroke
 import java.awt.RenderingHints
 import java.awt.geom.Ellipse2D
 
+// =============================================================================
+// EXECUTION GUARD - Only run once per project (not once per image)
+// =============================================================================
+// Check if we're running in a per-image context and only proceed for the first image
+def currentImage = getCurrentImageData()
+if (currentImage != null) {
+    def currentImageName = currentImage.getServer().getMetadata().getName()
+    def project = getProject()
+    if (project != null) {
+        def allImages = project.getImageList()
+        if (allImages.size() > 0) {
+            def firstImageName = allImages[0].readImageData().getServer().getMetadata().getName()
+            if (currentImageName != firstImageName) {
+                println "QC Export: Skipping ${currentImageName} - only running once per project on first image"
+                return
+            }
+        }
+    }
+}
+
+println "QC Export: Running on first image - will process entire project"
+
 // Configuration
 def QC_OUTPUT_DIR = "qc_cell_detection_thumbnails"
 def THUMBNAIL_WIDTH = 2048  // High resolution for detailed QC
