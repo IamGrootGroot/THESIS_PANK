@@ -9,6 +9,33 @@ import java.awt.Color
 
 // Script to import TRIDENT-generated GeoJSON tissue segmentations into QuPath
 
+// =============================================================================
+// EXECUTION GUARD - Prevent multiple runs per project
+// =============================================================================
+// Check if this script is already running or has been completed
+def projectName = getProject()?.getName() ?: "unknown"
+def executionKey = "TRIDENT_IMPORT_EXECUTED_${projectName}"
+
+// Use a simple file-based lock to prevent multiple executions
+def lockFile = new File(System.getProperty("java.io.tmpdir"), "${executionKey}.lock")
+if (lockFile.exists()) {
+    def lockAge = System.currentTimeMillis() - lockFile.lastModified()
+    if (lockAge < 300000) { // 5 minutes timeout
+        println "TRIDENT import already running or recently completed for project: ${projectName}"
+        println "If this is incorrect, delete: ${lockFile.absolutePath}"
+        return
+    } else {
+        // Lock file is old, remove it
+        lockFile.delete()
+    }
+}
+
+// Create lock file
+lockFile.createNewFile()
+lockFile.deleteOnExit() // Cleanup on JVM exit
+
+println "Starting TRIDENT import for project: ${projectName}"
+
 // Expected argument:
 // args[0]: Absolute base path of TRIDENT's output directory 
 //          (This is the directory that contains subdirectories for each slide, 
@@ -17,6 +44,7 @@ import java.awt.Color
 if (args.size() < 1) {
     println "Error: Missing argument. Required: <trident_base_output_dir>"
     println "  Example: qupath script 00a_import_trident_geojson.groovy --args /path/to/trident_outputs/"
+    lockFile.delete() // Cleanup lock file
     return
 }
 
@@ -25,12 +53,14 @@ def tridentBaseOutputDir = new File(tridentBaseOutputDirPath)
 
 if (!tridentBaseOutputDir.exists() || !tridentBaseOutputDir.isDirectory()) {
     println "Error: TRIDENT base output directory not found or is not a directory: ${tridentBaseOutputDirPath}"
+    lockFile.delete() // Cleanup lock file
     return
 }
 
 def project = getProject()
 if (project == null) {
     println "Error: No QuPath project is currently open."
+    lockFile.delete() // Cleanup lock file
     return
 }
 
@@ -203,3 +233,5 @@ println "Summary:"
 println "  Successfully imported annotations for: ${importedCount} images."
 println "  GeoJSON files not found for: ${notFoundCount} images."
 println "  Errors during import for: ${errorCount} images." 
+
+lockFile.delete() // Cleanup lock file 
