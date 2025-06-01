@@ -36,6 +36,90 @@ if (project == null) {
 
 println "Starting TRIDENT GeoJSON import process..."
 println "Using TRIDENT output base directory: ${tridentBaseOutputDir.getAbsolutePath()}"
+println "=" * 80
+
+// =============================================================================
+// Pre-import Validation and Diagnostics
+// =============================================================================
+println "=== PRE-IMPORT VALIDATION ==="
+
+// Count images in QuPath project
+def projectImages = project.getImageList()
+def projectImageCount = projectImages.size()
+println "QuPath project images: ${projectImageCount}"
+
+// Get list of image names from project (without extensions)
+def projectImageNames = []
+projectImages.each { entry ->
+    try {
+        def imageData = entry.readImageData()
+        def server = imageData.getServer()
+        def imageNameWithExtension = server.getMetadata().getName()
+        def imageNameNoExt = GeneralTools.stripExtension(imageNameWithExtension)
+        projectImageNames.add(imageNameNoExt)
+    } catch (Exception e) {
+        println "Warning: Could not read image name from project entry: ${e.getMessage()}"
+    }
+}
+
+// Count GeoJSON files in TRIDENT output
+def geojsonDir = new File(tridentBaseOutputDir, "contours_geojson")
+def geojsonFiles = []
+def geojsonCount = 0
+
+if (geojsonDir.exists() && geojsonDir.isDirectory()) {
+    geojsonFiles = geojsonDir.listFiles().findAll { file ->
+        file.isFile() && file.getName().toLowerCase().endsWith(".geojson")
+    }
+    geojsonCount = geojsonFiles.size()
+    println "TRIDENT GeoJSON files found: ${geojsonCount}"
+    println "GeoJSON directory: ${geojsonDir.getAbsolutePath()}"
+} else {
+    println "WARNING: TRIDENT GeoJSON directory not found: ${geojsonDir.getAbsolutePath()}"
+}
+
+// Check for discrepancies
+println "\n--- VALIDATION RESULTS ---"
+if (projectImageCount == geojsonCount) {
+    println "✓ GOOD: Number of project images matches GeoJSON files (${projectImageCount})"
+} else {
+    println "⚠ WARNING: Mismatch detected!"
+    println "  Project images: ${projectImageCount}"
+    println "  GeoJSON files: ${geojsonCount}"
+    println "  Difference: ${Math.abs(projectImageCount - geojsonCount)}"
+    
+    if (projectImageCount > geojsonCount) {
+        println "  → Some project images may not have corresponding TRIDENT segmentations"
+    } else {
+        println "  → Some GeoJSON files may not have corresponding project images"
+    }
+}
+
+// Check for name matches
+if (!geojsonFiles.isEmpty() && !projectImageNames.isEmpty()) {
+    def geojsonNames = geojsonFiles.collect { file -> 
+        GeneralTools.stripExtension(file.getName())
+    }
+    
+    def missingInProject = geojsonNames.findAll { name -> !projectImageNames.contains(name) }
+    def missingInTrident = projectImageNames.findAll { name -> !geojsonNames.contains(name) }
+    
+    if (missingInProject.isEmpty() && missingInTrident.isEmpty()) {
+        println "✓ GOOD: All image names match between project and GeoJSON files"
+    } else {
+        if (!missingInProject.isEmpty()) {
+            println "⚠ GeoJSON files without matching project images:"
+            missingInProject.each { name -> println "  - ${name}.geojson" }
+        }
+        if (!missingInTrident.isEmpty()) {
+            println "⚠ Project images without matching GeoJSON files:"
+            missingInTrident.each { name -> println "  - ${name}" }
+        }
+    }
+}
+
+println "=" * 80
+println "\n=== STARTING IMPORT PROCESS ==="
 
 def importedCount = 0
 def notFoundCount = 0
@@ -57,20 +141,12 @@ project.getImageList().eachWithIndex { entry, index ->
         println "  Found corresponding GeoJSON: ${geojsonFile.getAbsolutePath()}"
         try {
             // Import GeoJSON objects using the correct PathIO method
-            // PathIO.readObjectsFromGeoJSON expects an InputStream, so we'll use importObjectsFromFile instead
             List<PathObject> importedObjects = PathIO.readObjects(geojsonFile.toPath())
             
             if (importedObjects.isEmpty()) {
                 println "  Warning: GeoJSON file ${geojsonFile.getName()} was empty or contained no valid QuPath objects."
             } else {
-                // Optional: Clear existing annotations of a specific type if needed before importing
-                // Example: clearExistingAnnotations(imageData, PathClass.fromString("Tissue"))
-                // imageData.getHierarchy().removeObjects(imageData.getHierarchy().getAnnotationObjects().findAll{it.getPathClass() == tissueClass}, true)
-
-                // Add imported objects to the hierarchy
-                imageData.getHierarchy().addObjects(importedObjects) 
-                
-                // Get or create a PathClass for the imported tissue annotations
+                // Get or create a PathClass for the imported tissue annotations first
                 def tissueClassName = "Tissue (TRIDENT)"
                 def tissueColor = Color.GREEN
                 def tissueClass = getPathClass(tissueClassName) // Check if class already exists
@@ -80,15 +156,33 @@ project.getImageList().eachWithIndex { entry, index ->
                    println "    Created new PathClass: ${tissueClassName}"
                 }
                 
-                // Assign the PathClass to all imported objects
-                importedObjects.each { pathObject ->
-                    pathObject.setPathClass(tissueClass)
+                // Check if TRIDENT annotations already exist for this image
+                def existingTridentAnnotations = imageData.getHierarchy().getAnnotationObjects().findAll { 
+                    it.getPathClass() == tissueClass 
                 }
                 
-                // Save the changes to the image data within the project
-                entry.saveImageData(imageData)
-                println "  Successfully imported ${importedObjects.size()} objects from GeoJSON for ${imageNameNoExt} and assigned class '${tissueClassName}'. Saved to project."
-                importedCount++
+                if (!existingTridentAnnotations.isEmpty() && existingTridentAnnotations.size() == importedObjects.size()) {
+                    println "  TRIDENT annotations already exist (${existingTridentAnnotations.size()} objects). Skipping import for ${imageNameNoExt}."
+                } else {
+                    // Clear existing TRIDENT annotations to prevent duplicates
+                    if (!existingTridentAnnotations.isEmpty()) {
+                        println "  Clearing ${existingTridentAnnotations.size()} existing TRIDENT annotations before import..."
+                        imageData.getHierarchy().removeObjects(existingTridentAnnotations, true)
+                    }
+                    
+                    // Add imported objects to the hierarchy
+                    imageData.getHierarchy().addObjects(importedObjects) 
+                    
+                    // Assign the PathClass to all imported objects
+                    importedObjects.each { pathObject ->
+                        pathObject.setPathClass(tissueClass)
+                    }
+                    
+                    // Save the changes to the image data within the project
+                    entry.saveImageData(imageData)
+                    println "  Successfully imported ${importedObjects.size()} objects from GeoJSON for ${imageNameNoExt} and assigned class '${tissueClassName}'. Saved to project."
+                    importedCount++
+                }
             }
         } catch (Exception e_import) {
             println "  Error importing GeoJSON for ${imageNameNoExt}: ${e_import.getMessage()}"
