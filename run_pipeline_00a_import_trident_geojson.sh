@@ -24,7 +24,7 @@ show_help() {
     echo
     echo "Options:"
     echo "  -t, --trident PATH    Path to TRIDENT output base directory"
-    echo "  -p, --project PATH    Path to specific QuPath project (.qpproj)"
+    echo "  -p, --project PATH    Path to QuPath project directory or .qpproj file"
     echo "  -q, --qupath PATH     Path to QuPath executable (optional)"
     echo "  -a, --all             Process all QuPath projects in current directory"
     echo "  -s, --test            Process only the test project (QuPath_MP_PDAC5)"
@@ -32,11 +32,13 @@ show_help() {
     echo
     echo "Examples:"
     echo "  $0 -t ./trident_output/contours_geoJSON -s                    # Test project only"
-    echo "  $0 -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100/project.qpproj"
+    echo "  $0 -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100  # Project directory"
+    echo "  $0 -t ./trident_output/contours_geoJSON -p QuPath_MP_PDAC100/project.qpproj  # Project file"
     echo "  $0 -t ./trident_output/contours_geoJSON -a                    # All projects"
-    echo "  $0 -t ./trident_output -q /path/to/QuPath -p project.qpproj   # Custom QuPath"
+    echo "  $0 -t ./trident_output -q /path/to/QuPath -p project_dir      # Custom QuPath"
     echo
     echo "Note: TRIDENT output directory is required."
+    echo "      Project path can be either directory (auto-appends /project.qpproj) or .qpproj file."
     echo "      If QuPath path not specified, uses default from script configuration."
     exit 1
 }
@@ -153,6 +155,25 @@ mode_count=0
 if [ "$mode_count" -ne 1 ]; then
     error_log "Please specify exactly one processing mode: --all, --test, or --project"
     show_help
+fi
+
+# =============================================================================
+# Project Path Normalization
+# =============================================================================
+# If PROJECT_PATH is provided, check if it's a directory or file
+if [ -n "$PROJECT_PATH" ]; then
+    if [ -d "$PROJECT_PATH" ]; then
+        # If it's a directory, append /project.qpproj
+        PROJECT_PATH="${PROJECT_PATH%/}/project.qpproj"
+        log "Project directory provided, using: $PROJECT_PATH"
+    elif [[ "$PROJECT_PATH" == *.qpproj ]]; then
+        # If it already ends with .qpproj, use as is
+        log "Project file provided: $PROJECT_PATH"
+    else
+        # If it's neither a directory nor ends with .qpproj, assume it's a directory without trailing slash
+        PROJECT_PATH="${PROJECT_PATH}/project.qpproj"
+        log "Assuming project directory, using: $PROJECT_PATH"
+    fi
 fi
 
 # =============================================================================
