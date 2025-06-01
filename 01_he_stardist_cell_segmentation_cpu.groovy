@@ -71,7 +71,7 @@ if (imageList.isEmpty()) {
 println "Project contains ${imageList.size()} images"
 
 // Check if cell segmentation has already been completed
-def projectDir = new File(project.getPath()).getParentFile()
+def projectDir = new File(project.getPath().toString()).getParentFile()
 def completionMarkerFile = new File(projectDir, ".stardist_completed")
 if (completionMarkerFile.exists()) {
     println "Cell segmentation already completed for this project. Skipping..."
