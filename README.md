@@ -33,10 +33,11 @@ pip install -r requirements.txt
 
 #### 1. Test Your Setup
 ```bash
-./test_unified_pipeline.sh -v
+# Test with QuPath_MP_PDAC100 project
+./test_unified_pipeline.sh -p ../QuPath_MP_PDAC100 -v
 ```
 
-#### 2. Run Complete Pipeline
+#### 2. Run Complete Pipeline for QuPath_MP_PDAC100
 
 The pipeline consists of multiple steps that must be run sequentially:
 
@@ -48,29 +49,36 @@ python run_trident_segmentation.py \
     --trident_script_path /path/to/trident/run_batch_of_slides.py
 
 # Import TRIDENT results into QuPath (if Step 0 was performed)
-./run_pipeline_00a_import_trident_geojson.sh -t ./trident_output_pdac100 -s
+./run_pipeline_00a_import_trident_geojson.sh -t ./trident_output_pdac100 -p ../QuPath_MP_PDAC100
 
-# Step 1: Cell Detection (StarDist) - Processes single test project
-./run_pipeline_01_unified_stardist.sh -s
+# Step 1: Cell Detection (StarDist) - Process QuPath_MP_PDAC100 project
+./run_pipeline_01_unified_stardist.sh -p ../QuPath_MP_PDAC100
 
-# Step 2: Tile Extraction
-./run_pipeline_02_batch_tiling.sh -s  
+# Step 2: Tile Extraction (automatically included in Step 1)
+# ./run_pipeline_02_batch_tiling.sh -p ../QuPath_MP_PDAC100  # Only if running separately
 
 # Step 3: Feature Extraction
 ./run_pipeline_03.sh \
     -i output/tiles \
-    -o features.csv \
+    -o features_pdac100.csv \
     -t YOUR_HUGGINGFACE_TOKEN \
     -b 32
 
 # Step 4: Clustering & Visualization
 python 04_05_umap_3d_kmeans30.py \
-    --input_csv features.csv \
-    --output_dir results/
+    --input_csv features_pdac100.csv \
+    --output_dir results_pdac100/
 
 # Optional: Generate QC thumbnails and upload to Google Drive
-./run_pipeline_01_unified_qc_export.sh -s -u
+./run_pipeline_01_unified_qc_export.sh -p ../QuPath_MP_PDAC100 -u
 ```
+
+**Project-specific outputs:**
+- **QuPath Project**: `../QuPath_MP_PDAC100/`
+- **Tiles**: `output/tiles/` (extracted from PDAC100 cells)
+- **Features**: `features_pdac100.csv` (1536-dimensional embeddings)
+- **Results**: `results_pdac100/` (clustering and visualizations)
+- **QC Images**: `qc_thumbnails/` (quality control outputs)
 
 **What each script does:**
 - `run_trident_segmentation.py`: Tissue segmentation only
