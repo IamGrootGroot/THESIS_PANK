@@ -336,11 +336,129 @@ process_project() {
         # Now run the full import with progress bar
         echo -e "\033[1;33mImporting TRIDENT annotations...\033[0m"
         
-        # Run full import in background and capture output to log only
-        if "$QUPATH_PATH" script --project="$project_file" \
-                        --save \
-                        --args="$TRIDENT_DIR" \
-                        "$GROOVY_SCRIPT" \
+        # Create a temporary import-only script that opens the project internally
+        local temp_import_script="/tmp/import_only_${RANDOM}.groovy"
+        
+        cat > "$temp_import_script" << EOF
+import qupath.lib.projects.Project
+import qupath.lib.projects.ProjectIO
+import qupath.lib.images.ImageData
+import qupath.lib.common.GeneralTools
+import qupath.lib.io.PathIO
+import qupath.lib.objects.PathObject
+import qupath.lib.objects.classes.PathClassFactory
+import qupath.lib.scripting.QP
+import java.awt.Color
+
+// Import-only script - opens project and processes all images
+
+if (args.size() < 2) {
+    println "Error: Missing arguments. Required: <project_file> <trident_base_output_dir>"
+    return
+}
+
+def projectFilePath = args[0]
+def tridentBaseOutputDirPath = args[1]
+def tridentBaseOutputDir = new File(tridentBaseOutputDirPath)
+
+if (!tridentBaseOutputDir.exists() || !tridentBaseOutputDir.isDirectory()) {
+    println "Error: TRIDENT base output directory not found: \${tridentBaseOutputDirPath}"
+    return
+}
+
+// Open the project
+def projectFile = new File(projectFilePath)
+if (!projectFile.exists()) {
+    println "Error: Project file not found: \${projectFilePath}"
+    return
+}
+
+def project = ProjectIO.loadProject(projectFile.toURI(), BufferedImage.class, true)
+if (project == null) {
+    println "Error: Could not load project from \${projectFilePath}"
+    return
+}
+
+println "=== STARTING IMPORT PROCESS ==="
+println "Processing project: \${project.getName()}"
+
+def importedCount = 0
+def notFoundCount = 0
+def errorCount = 0
+
+project.getImageList().eachWithIndex { entry, index ->
+    def imageData = entry.readImageData()
+    def server = imageData.getServer()
+    def imageNameWithExtension = server.getMetadata().getName()
+    def imageNameNoExt = GeneralTools.stripExtension(imageNameWithExtension)
+    
+    println "Processing QuPath image (\${index + 1}/\${project.getImageList().size()}): \${imageNameWithExtension} (stripped: \${imageNameNoExt})"
+
+    def geojsonFile = new File(tridentBaseOutputDir, "contours_geojson" + File.separator + imageNameNoExt + ".geojson")
+
+    if (geojsonFile.exists() && geojsonFile.isFile()) {
+        println "  Found corresponding GeoJSON: \${geojsonFile.getAbsolutePath()}"
+        try {
+            List<PathObject> importedObjects = PathIO.readObjects(geojsonFile.toPath())
+            
+            if (importedObjects.isEmpty()) {
+                println "  Warning: GeoJSON file \${geojsonFile.getName()} was empty or contained no valid QuPath objects."
+            } else {
+                def tissueClassName = "Tissue (TRIDENT)"
+                def tissueColor = Color.GREEN
+                def tissueClass = project.getPathClasses().find { it.getName() == tissueClassName }
+                if (tissueClass == null) {
+                   tissueClass = PathClassFactory.getPathClass(tissueClassName, tissueColor)
+                   project.getPathClasses().add(tissueClass)
+                   println "    Created new PathClass: \${tissueClassName}"
+                }
+                
+                // SYSTEMATIC CLEANUP: Always clear existing TRIDENT annotations before importing
+                def existingTridentAnnotations = imageData.getHierarchy().getAnnotationObjects().findAll { 
+                    it.getPathClass() == tissueClass 
+                }
+                
+                if (!existingTridentAnnotations.isEmpty()) {
+                    println "  Clearing \${existingTridentAnnotations.size()} existing TRIDENT annotations before import..."
+                    imageData.getHierarchy().removeObjects(existingTridentAnnotations, true)
+                } else {
+                    println "  No existing TRIDENT annotations found - proceeding with fresh import"
+                }
+                
+                imageData.getHierarchy().addObjects(importedObjects) 
+                
+                importedObjects.each { pathObject ->
+                    pathObject.setPathClass(tissueClass)
+                }
+                
+                entry.saveImageData(imageData)
+                println "  Successfully imported \${importedObjects.size()} objects from GeoJSON for \${imageNameNoExt} and assigned class '\${tissueClassName}'. Saved to project."
+                importedCount++
+            }
+        } catch (Exception e_import) {
+            println "  Error importing GeoJSON for \${imageNameNoExt}: \${e_import.getMessage()}"
+            e_import.printStackTrace()
+            errorCount++
+        }
+    } else {
+        println "  Warning: Expected GeoJSON file not found for \${imageNameNoExt} at: \${geojsonFile.getAbsolutePath()}"
+        notFoundCount++
+    }
+    println "-----------------------------------------------------"
+}
+
+project.syncChanges()
+println "GeoJSON import process finished."
+println "Summary:"
+println "  Successfully imported annotations for: \${importedCount} images."
+println "  GeoJSON files not found for: \${notFoundCount} images."
+println "  Errors during import for: \${errorCount} images."
+EOF
+        
+        # Run import in background and capture output to log only (WITHOUT --project flag)
+        if "$QUPATH_PATH" script \
+                        --args="$project_file" "$TRIDENT_DIR" \
+                        "$temp_import_script" \
                         >> "$QUPATH_LOG" 2>&1 & then
             
             local import_pid=$!
@@ -351,6 +469,9 @@ process_project() {
             # Wait for import to complete and get exit code
             wait "$import_pid"
             local exit_code=$?
+            
+            # Clean up temp script
+            rm -f "$temp_import_script"
             
             if [ $exit_code -eq 0 ]; then
                 echo -e "\n\033[1;32m✓ Successfully imported TRIDENT annotations for $project_name\033[0m"
@@ -364,6 +485,7 @@ process_project() {
         else
             echo -e "\n\033[1;31m✗ Failed to start import process for $project_name\033[0m"
             error_log "Failed to start import process for project: $project_name"
+            rm -f "$temp_import_script"
             return 1
         fi
         
@@ -371,6 +493,7 @@ process_project() {
         echo -e "\033[1;31m✗ Validation failed for $project_name\033[0m"
         error_log "Validation failed for project: $project_name"
         rm -f "$temp_validation_script"
+        rm -f "$temp_import_script"
         return 1
     fi
 }
