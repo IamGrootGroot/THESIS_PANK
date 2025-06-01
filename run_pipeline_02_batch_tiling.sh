@@ -89,13 +89,18 @@ echo
 
 log "Starting tile extraction pipeline (Step 02)"
 
+# Determine script directory for absolute paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TILING_SCRIPT="$SCRIPT_DIR/02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy"
+
 # Validate setup
-if [ ! -f "02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy" ]; then
-    error_log "Tile extraction script not found: 02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy"
+if [ ! -f "$TILING_SCRIPT" ]; then
+    error_log "Tile extraction script not found: $TILING_SCRIPT"
     exit 1
 fi
 
 log "Setup validation completed successfully"
+log "Using tiling script: $TILING_SCRIPT"
 
 # Function to process a single project
 process_project() {
@@ -113,7 +118,7 @@ process_project() {
     log "Running tile extraction for $project_name"
     if java -cp "$QUPATH_CLASSPATH" qupath.QuPath script \
                 --project="$project_file" \
-                02_he_wsubfolder_jpg_cell_tile_224x224_shell_compatible.groovy \
+                "$TILING_SCRIPT" \
                 >> "$QUPATH_LOG" 2>&1; then
         log "Tile extraction completed for $project_name"
     else
