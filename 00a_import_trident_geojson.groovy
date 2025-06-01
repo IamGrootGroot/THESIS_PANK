@@ -178,33 +178,30 @@ project.getImageList().eachWithIndex { entry, index ->
                    println "    Created new PathClass: ${tissueClassName}"
                 }
                 
-                // Check if TRIDENT annotations already exist for this image
+                // SYSTEMATIC CLEANUP: Always clear existing TRIDENT annotations before importing
                 def existingTridentAnnotations = imageData.getHierarchy().getAnnotationObjects().findAll { 
                     it.getPathClass() == tissueClass 
                 }
                 
-                if (!existingTridentAnnotations.isEmpty() && existingTridentAnnotations.size() == importedObjects.size()) {
-                    println "  TRIDENT annotations already exist (${existingTridentAnnotations.size()} objects). Skipping import for ${imageNameNoExt}."
+                if (!existingTridentAnnotations.isEmpty()) {
+                    println "  Clearing ${existingTridentAnnotations.size()} existing TRIDENT annotations before import..."
+                    imageData.getHierarchy().removeObjects(existingTridentAnnotations, true)
                 } else {
-                    // Clear existing TRIDENT annotations to prevent duplicates
-                    if (!existingTridentAnnotations.isEmpty()) {
-                        println "  Clearing ${existingTridentAnnotations.size()} existing TRIDENT annotations before import..."
-                        imageData.getHierarchy().removeObjects(existingTridentAnnotations, true)
-                    }
-                    
-                    // Add imported objects to the hierarchy
-                    imageData.getHierarchy().addObjects(importedObjects) 
-                    
-                    // Assign the PathClass to all imported objects
-                    importedObjects.each { pathObject ->
-                        pathObject.setPathClass(tissueClass)
-                    }
-                    
-                    // Save the changes to the image data within the project
-                    entry.saveImageData(imageData)
-                    println "  Successfully imported ${importedObjects.size()} objects from GeoJSON for ${imageNameNoExt} and assigned class '${tissueClassName}'. Saved to project."
-                    importedCount++
+                    println "  No existing TRIDENT annotations found - proceeding with fresh import"
                 }
+                
+                // Add imported objects to the hierarchy
+                imageData.getHierarchy().addObjects(importedObjects) 
+                
+                // Assign the PathClass to all imported objects
+                importedObjects.each { pathObject ->
+                    pathObject.setPathClass(tissueClass)
+                }
+                
+                // Save the changes to the image data within the project
+                entry.saveImageData(imageData)
+                println "  Successfully imported ${importedObjects.size()} objects from GeoJSON for ${imageNameNoExt} and assigned class '${tissueClassName}'. Saved to project."
+                importedCount++
             }
         } catch (Exception e_import) {
             println "  Error importing GeoJSON for ${imageNameNoExt}: ${e_import.getMessage()}"
