@@ -1,41 +1,28 @@
 /*
- * Simple and Reliable StarDist Cell Segmentation
- * Based on A.Khellaf's working version, modified for TRIDENT annotations
- * 
- * This script processes all "Tissue (TRIDENT)" annotations in the current image
- * using StarDist2D for cell detection.
- * 
- * PERFORMANCE TUNING PARAMETERS:
- * - maxDimension: Higher = faster but more memory (4096 conservative, 8192 fast, 16384 max)
- * - threshold: Lower = more cells but slower (0.25 balanced, 0.3 faster, 0.2 slower)
- * - pixelSize: Match your actual resolution for optimal speed
- * - percentiles: Wider range = more robust but slower normalization
+ * StarDist Cell Segmentation for TRIDENT annotations
+ * Processes all "Tissue (TRIDENT)" annotations using StarDist2D
  */
 
-// Cell segmentation using StarDist2D - based on A.Khellaf's working version
-// Modified to process TRIDENT annotations instead of selected objects
-
-// Import in the same order as Khellaf's working version
 import qupath.lib.gui.dialogs.Dialogs
 import qupath.ext.stardist.StarDist2D
 
 println "=== StarDist Extension Test ==="
 println "StarDist2D class loaded successfully: ${StarDist2D.class.name}"
 
-// Model path (updated for server location)
-def pathModel = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
-println "Model path: ${pathModel}"
+// Model path - configurable via environment or default
+def modelPath = System.getProperty("MODEL_PATH") ?: 
+               System.getenv("MODEL_PATH") ?: 
+               "./models/he_heavy_augment.pb"
+println "Model path: ${modelPath}"
 
-// Check if model exists
-def modelFile = new File(pathModel)
+def modelFile = new File(modelPath)
 if (!modelFile.exists()) {
-    println "ERROR: Model file not found at ${pathModel}"
+    println "ERROR: Model file not found at ${modelPath}"
     return
 }
 
 println "Model file found successfully"
 
-// Get current image data
 def imageData = getCurrentImageData()
 if (imageData == null) {
     println "ERROR: No image data available"
@@ -46,22 +33,21 @@ def server = imageData.getServer()
 def imageName = server.getMetadata().getName()
 println "Processing image: ${imageName}"
 
-// Create StarDist detector (exact same parameters as Khellaf)
+// Create StarDist detector
 println "Creating StarDist detector..."
-def stardist = StarDist2D.builder(pathModel)
-      .threshold(0.25)              // Prediction threshold
-      .preprocess(                 // Apply normalization
+def stardist = StarDist2D.builder(modelPath)
+      .threshold(0.25)
+      .preprocess(
         StarDist2D.imageNormalizationBuilder()
-            .maxDimension(4096)    // Conservative setting
-            .percentiles(0.2, 99.8)  // Khellaf's exact values
+            .maxDimension(4096)
+            .percentiles(0.2, 99.8)
             .build()
     )
-      .pixelSize(0.23)              // Resolution
+      .pixelSize(0.23)
       .build()
 
 println "StarDist detector created successfully"
 
-// Get hierarchy and find TRIDENT annotations
 def hierarchy = imageData.getHierarchy()
 def tridentClass = getPathClass("Tissue (TRIDENT)")
 
@@ -74,7 +60,6 @@ if (tridentClass == null) {
     return
 }
 
-// Find all TRIDENT annotations
 def tridentAnnotations = hierarchy.getAnnotationObjects().findAll { 
     it.getPathClass() == tridentClass 
 }
@@ -86,16 +71,13 @@ if (tridentAnnotations.isEmpty()) {
 
 println "Found ${tridentAnnotations.size()} TRIDENT annotation(s)"
 
-// Process each TRIDENT annotation (same as Khellaf's approach)
 def totalDetections = 0
 tridentAnnotations.eachWithIndex { annotation, index ->
     println "Processing TRIDENT annotation ${index + 1}/${tridentAnnotations.size()}"
     
     try {
-        // Run detection (exact same call as Khellaf but with list)
         stardist.detectObjects(imageData, [annotation])
         
-        // Count detections in this annotation
         def detections = annotation.getChildObjects().findAll { it.isDetection() }
         totalDetections += detections.size()
         
@@ -107,11 +89,9 @@ tridentAnnotations.eachWithIndex { annotation, index ->
     }
 }
 
-// Update hierarchy
 println "Updating hierarchy..."
 fireHierarchyUpdate()
 
-// Print summary
 println "=== Detection Complete ==="
 println "Image: ${imageName}"
 println "TRIDENT annotations processed: ${tridentAnnotations.size()}"

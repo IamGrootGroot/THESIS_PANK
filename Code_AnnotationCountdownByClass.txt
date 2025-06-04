@@ -6,7 +6,9 @@ def project = QPEx.getProject()
 def imageList = project.getImageList()
 
 // Define a safe directory to save the CSV file
-def outputDir = new File("C:/Users/LA0122630/Documents/QuPathExports")  // Change if needed
+def outputDir = new File(System.getProperty("OUTPUT_DIR") ?: 
+                        System.getenv("OUTPUT_DIR") ?: 
+                        "./output")
 
 // Ensure the directory exists
 if (!outputDir.exists()) {

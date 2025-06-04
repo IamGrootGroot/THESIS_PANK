@@ -9,9 +9,12 @@
 # after StarDist cell segmentation has been completed.
 # =============================================================================
 
-# QuPath Configuration
-STARDIST_JAR="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/lib/app/qupath-extension-stardist-0.6.0-rc1.jar"
-QUPATH_CLASSPATH="$STARDIST_JAR:/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/lib/app/*"
+set -euo pipefail
+
+# Configuration - use environment variables or defaults
+QUPATH_PATH="${QUPATH_PATH:-./qupath_cpu_build_0.6.0/QuPath/bin/QuPath}"
+STARDIST_JAR="${STARDIST_JAR:-./extensions/qupath-extension-stardist-0.6.0-rc1.jar}"
+QUPATH_CLASSPATH="$STARDIST_JAR:$(dirname "$QUPATH_PATH")/../lib/app/*"
 
 # Help function
 show_help() {

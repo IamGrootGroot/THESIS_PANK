@@ -9,12 +9,14 @@
 # segmentations into QuPath projects.
 # =============================================================================
 
+set -euo pipefail
+
 # =============================================================================
 # Default QuPath Configuration
 # =============================================================================
 # QuPath installation paths (same as unified pipeline)
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_051_PATH="${QUPATH_051_PATH:-./qupath_gpu_build_0.5.1/QuPath/bin/QuPath}"
+QUPATH_06_PATH="${QUPATH_06_PATH:-./qupath_cpu_build_0.6.0/QuPath/bin/QuPath}"
 
 # =============================================================================
 # Help Function

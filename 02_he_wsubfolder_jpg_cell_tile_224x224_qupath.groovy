@@ -1,16 +1,22 @@
-// Patch extraction script for QuPath 0.5.1
-// Extracts 224x224 px patches centered around detected cell centroids
-// Saves patches in subfolders named after each ROI in the specified output directory
-// Updated to save patches with format: <annotation_name>_<centroidX>_<centroidY>_<counter>.jpg
+/*
+ * Cell Tile Export Script
+ * Exports 224x224 cell tiles from QuPath annotations
+ */
 
 import qupath.lib.images.servers.ImageServer
 import qupath.lib.images.writers.ImageWriterTools
 import qupath.lib.regions.RegionRequest
 import qupath.lib.common.GeneralTools
 import qupath.lib.objects.PathAnnotationObject
+import qupath.lib.images.servers.ImageServerProvider
+import qupath.lib.regions.ImagePlane
+import static qupath.lib.gui.scripting.QPEx.*
+
+def TILES_OUTPUT = new File(System.getProperty("TILES_OUTPUT") ?: 
+                           System.getenv("TILES_OUTPUT") ?: 
+                           "./output/tiles")
 
 // Define configuration variables directly in the script
-def TILES_OUTPUT = new File("/Users/maxencepelloux/PYTHON_Projects/THESIS_PANK/output/tiles")  // Base output directory
 def PATCH_SIZE = 224  // Size of the patches in pixels
 def MAGNIFICATION = 20.0  // Target magnification for the patches
 

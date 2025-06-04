@@ -26,24 +26,69 @@ Requirements:
 """
 
 import os
-import torch
-import logging
-import argparse
-from torch.utils.data import DataLoader, Dataset
-from PIL import Image
+import sys
 import pandas as pd
-from tqdm import tqdm
+import numpy as np
+import torch
+import torch.nn as nn
+from torchvision import transforms
+from PIL import Image
+import argparse
 import timm
-from timm.data import resolve_data_config
-from timm.data.transforms_factory import create_transform
+from tqdm import tqdm
+import logging
+from pathlib import Path
+import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
+import json
 from huggingface_hub import login
+import warnings
+warnings.filterwarnings("ignore")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+class TileDataset:
+    def __init__(self, image_paths, transform=None):
+        self.image_paths = image_paths
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        image_path = self.image_paths[idx]
+        try:
+            image = Image.open(image_path).convert('RGB')
+            if self.transform:
+                image = self.transform(image)
+            return image, str(image_path)
+        except Exception as e:
+            logger.error(f"Error loading image {image_path}: {e}")
+            return None, str(image_path)
+
+def load_model():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Using device: {device}")
+    
+    # Try to login to HuggingFace using environment variable
+    hf_token = os.getenv('HUGGING_FACE_TOKEN')
+    if hf_token:
+        try:
+            login(token=hf_token)
+            logger.info("Successfully logged in to HuggingFace")
+        except Exception as e:
+            logger.warning(f"Failed to login to HuggingFace: {e}")
+    else:
+        logger.warning("HUGGING_FACE_TOKEN environment variable not set. Some models may not be accessible.")
+    
+    model = timm.create_model('vit_large_patch16_224', pretrained=True, num_classes=0)
+    model = model.to(device)
+    model.eval()
+    
+    logger.info(f"Model loaded successfully on {device}")
+    return model, device
 
 # ----------------------------------------
 # 1) Custom Dataset for Image Tiles

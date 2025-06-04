@@ -13,6 +13,9 @@ from huggingface_hub import login
 import numpy as np
 from pathlib import Path
 import sys
+import argparse
+import logging
+import warnings
 
 # Add the parent directory to the path so we can import config
 sys.path.append(str(Path(__file__).parent.parent))
@@ -20,6 +23,9 @@ from config import (
     PATCHES_DIR, FEATURES_OUTPUT, BATCH_SIZE, FEATURE_DIM,
     get_os_path, setup_directories
 )
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Ensure directories exist
 setup_directories()
@@ -46,10 +52,14 @@ class PatchDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.image_files[idx]
-        image = Image.open(img_path).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
-        return image, img_path
+        try:
+            image = Image.open(img_path).convert('RGB')
+            if self.transform:
+                image = self.transform(image)
+            return image, img_path
+        except Exception as e:
+            logger.error(f"Error loading image {img_path}: {e}")
+            return None, img_path
 
 ######################################################
 # 2) Model initialization
@@ -58,8 +68,17 @@ def get_model(device):
     """
     Logs in to HuggingFace Hub and returns the UNI2 model on the specified device.
     """
-    login(token='YOUR_HUGGING_FACE_TOKEN_HERE') # Please keep it private (it's my personal token)
-
+    # Try to login to HuggingFace using environment variable
+    hf_token = os.getenv('HUGGING_FACE_TOKEN')
+    if hf_token:
+        try:
+            login(token=hf_token)
+            logger.info("Successfully logged in to HuggingFace")
+        except Exception as e:
+            logger.warning(f"Failed to login to HuggingFace: {e}")
+    else:
+        logger.warning("HUGGING_FACE_TOKEN environment variable not set. Some models may not be accessible.")
+    
     # These hyperparameters come from:
     # https://huggingface.co/mahmoodlab/uni2-h/blob/main/configs/uni2_h.yaml
     timm_kwargs = {

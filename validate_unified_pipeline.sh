@@ -9,6 +9,40 @@
 # actually running the full pipeline. Now includes custom QuPath testing.
 # =============================================================================
 
+set -euo pipefail
+
+# Configuration - use environment variables or defaults
+QUPATH_06_PATH="${QUPATH_06_PATH:-./qupath_06/bin/QuPath}"
+QUPATH_051_PATH="${QUPATH_051_PATH:-./qupath_051/bin/QuPath}"
+MODEL_PATH="${MODEL_PATH:-./models/he_heavy_augment.pb}"
+HE_BASE_DIR="${HE_BASE_DIR:-./data}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1${NC}" >&2
+}
+
+warn() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARN: $1${NC}" >&2
+}
+
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" >&2
+}
+
+debug() {
+    if [ "${DEBUG:-false}" = "true" ]; then
+        echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] DEBUG: $1${NC}" >&2
+    fi
+}
+
 # Help function
 show_help() {
     echo -e "\033[1;35mUsage: $0 [OPTIONS]\033[0m"
@@ -91,10 +125,6 @@ echo
 
 # Test QuPath installations
 echo "Testing QuPath installations..."
-
-# QuPath Installation Paths (same as unified pipeline)
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
 
 # Function to detect QuPath version
 detect_qupath_version() {
@@ -196,7 +226,6 @@ echo
 
 # Test model file
 echo "Testing model file..."
-MODEL_PATH="/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
 if [ -f "$MODEL_PATH" ]; then
     model_size=$(du -h "$MODEL_PATH" | cut -f1)
     echo "✅ Model file found: $MODEL_PATH ($model_size)"

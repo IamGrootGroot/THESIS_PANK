@@ -9,16 +9,18 @@
 # TRIDENT annotations imported. It does NOT re-import annotations.
 # =============================================================================
 
+set -euo pipefail
+
 # =============================================================================
 # QuPath Installation Paths Configuration
 # =============================================================================
 # QuPath 0.6 (CPU-optimized build with StarDist 0.6.0-rc1)
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_06_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath"
+QUPATH_06_PATH="${QUPATH_06_PATH:-./qupath_cpu_build_0.6.0/QuPath/bin/QuPath}"
+QUPATH_06_DIR="${QUPATH_06_PATH%/bin/QuPath}"
 
 # QuPath 0.5.1 (GPU-enabled build)
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_051_DIR="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath"
+QUPATH_051_PATH="${QUPATH_051_PATH:-./qupath_gpu_build_0.5.1/QuPath/bin/QuPath}"
+QUPATH_051_DIR="${QUPATH_051_PATH%/bin/QuPath}"
 
 # Default fallback (can be overridden with -q option or auto-detection)
 DEFAULT_QUPATH_PATH="${QUPATH_PATH:-${QUPATH_06_PATH}}"

@@ -9,12 +9,14 @@
 # StarDist cell detections, compatible with both CPU and GPU processing modes.
 # =============================================================================
 
+set -euo pipefail
+
 # =============================================================================
 # Configuration
 # =============================================================================
 # QuPath paths (same as unified pipeline)
-QUPATH_06_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_cpu_build_0.6.0/qupath/build/dist/QuPath/bin/QuPath"
-QUPATH_051_PATH="/u/trinhvq/Documents/maxencepelloux/qupath_gpu_build_0.5.1/qupath/build/dist/QuPath/bin/QuPath"
+QUPATH_06_PATH="${QUPATH_06_PATH:-./qupath_cpu_build_0.6.0/QuPath/bin/QuPath}"
+QUPATH_051_PATH="${QUPATH_051_PATH:-./qupath_gpu_build_0.5.1/QuPath/bin/QuPath}"
 
 # Default output directory
 QC_OUTPUT_DIR="qc_cell_detection_thumbnails"
@@ -363,7 +365,7 @@ start_time=$(date +%s)
 qc_directories=()
 
 # Base directory for QuPath projects (parent of THESIS_PANK)
-HE_BASE_DIR="/u/trinhvq/Documents/maxencepelloux/HE"
+HE_BASE_DIR="${HE_BASE_DIR:-./data}"
 
 # Determine projects to process based on processing mode
 if [ "$TEST_ONLY" = true ]; then

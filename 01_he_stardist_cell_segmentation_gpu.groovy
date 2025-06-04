@@ -43,14 +43,16 @@ println "=== GPU-Optimized StarDist Cell Segmentation ==="
 println "QuPath 0.5.1 - CUDA GPU Acceleration"
 println "StarDist2D class loaded: ${StarDist2D.class.name}"
 
-// Model path (server location)
-def pathModel = "/u/trinhvq/Documents/maxencepelloux/HE/THESIS_PANK/models/he_heavy_augment.pb"
-println "Model path: ${pathModel}"
+def modelPath = System.getProperty("MODEL_PATH") ?: 
+               System.getenv("MODEL_PATH") ?: 
+               "./models/he_heavy_augment.pb"
+
+println "Model path: ${modelPath}"
 
 // Validate model file
-def modelFile = new File(pathModel)
+def modelFile = new File(modelPath)
 if (!modelFile.exists()) {
-    println "ERROR: Model file not found at ${pathModel}"
+    println "ERROR: Model file not found at ${modelPath}"
     return
 }
 println "Model file validated successfully"
@@ -96,7 +98,7 @@ try {
 
 // GPU-optimized StarDist detector configuration
 println "Creating GPU-optimized StarDist detector..."
-def stardist = StarDist2D.builder(pathModel)
+def stardist = StarDist2D.builder(modelPath)
       .threshold(0.25)              // Balanced prediction threshold
       .preprocess(                 // GPU-optimized normalization
         StarDist2D.imageNormalizationBuilder()

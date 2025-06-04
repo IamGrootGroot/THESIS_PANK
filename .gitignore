@@ -52,6 +52,11 @@ Thumbs.db
 *.model
 *.weights
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # Google Drive Authentication
 token.json
 *credentials*.json

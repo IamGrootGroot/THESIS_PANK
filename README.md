@@ -61,7 +61,7 @@ python run_trident_segmentation.py \
 ./run_pipeline_03.sh \
     -i output/tiles \
     -o features_pdac100.csv \
-    -t YOUR_HUGGINGFACE_TOKEN \
+    -t $HUGGING_FACE_TOKEN \
     -b 32
 
 # Step 4: Clustering & Visualization
@@ -169,7 +169,7 @@ Extracts 1536-dimensional features from each tile using UNI2-h model.
 ./run_pipeline_03.sh \
     -i output/tiles \
     -o features.csv \
-    -t YOUR_HUGGINGFACE_TOKEN \
+    -t $HUGGING_FACE_TOKEN \
     -b 32
 ```
 
@@ -302,3 +302,65 @@ For questions or support: mpelloux1@chu-grenoble.fr
 ## License
 
 Copyright (c) 2024 Maxence PELLOUX. All rights reserved.
+
+## Environment Variables
+
+Set the following environment variables before running the pipeline:
+
+```bash
+# Required
+export HUGGING_FACE_TOKEN="your_hf_token_here"
+export MODEL_PATH="/path/to/your/he_heavy_augment.pb"
+
+# Optional - QuPath paths (if not in default locations)
+export QUPATH_06_PATH="/path/to/qupath_0.6/bin/QuPath"
+export QUPATH_051_PATH="/path/to/qupath_0.5.1/bin/QuPath"
+
+# Optional - Output directories
+export TILES_OUTPUT="/path/to/tiles/output"
+export OUTPUT_DIR="/path/to/general/output"
+```
+
+## Quick Start
+
+1. **Set up environment:**
+   ```bash
+   # Set required environment variables
+   export HUGGING_FACE_TOKEN="your_token_here"
+   export MODEL_PATH="./models/he_heavy_augment.pb"
+   
+   # Install Python dependencies
+   pip install -r requirements_gdrive.txt
+   ```
+
+2. **Run the complete pipeline:**
+   ```bash
+   ./run_pipeline_01_unified_stardist.sh -p /path/to/project.qpproj -m gpu
+   ```
+
+## Pipeline Overview
+
+The pipeline consists of several stages:
+
+1. **Import TRIDENT annotations** (`00a_import_trident_geojson.groovy`)
+2. **Cell segmentation** (`01_he_stardist_cell_segmentation_*.groovy`)
+3. **Tile extraction** (`02_he_wsubfolder_jpg_cell_tile_224x224_*.groovy`)
+4. **Feature extraction** (`03_uni2_feature_extraction*.py`)
+5. **Analysis and visualization** (`04_05_umap_3d_kmeans30*.py`)
+
+## Usage Examples
+
+### Basic cell segmentation:
+```bash
+./run_pipeline_01_unified_stardist.sh -p project.qpproj -m cpu
+```
+
+### Process all projects with GPU acceleration:
+```bash
+./run_pipeline_01_unified_stardist.sh -a -m gpu
+```
+
+### With quality control and upload:
+```bash
+./run_pipeline_01_unified_qc_export.sh -p project.qpproj -n 10 -u -t token.json -m gpu
+```
