@@ -1,4 +1,4 @@
-**A Cellular Level Analysis Pipeline For Pathology Diagnosis and Prognosis Prediction **
+# Cellular Level Analysis Pipeline For Pathology Diagnosis and Prognosis Prediction
 
 ![ChatGPT Image May 30, 2025 at 04_04_05 PM](https://github.com/user-attachments/assets/7d9c9036-5df3-4d95-879d-a9203c68da14)
 
